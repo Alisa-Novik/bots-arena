@@ -18,37 +18,68 @@ func NewPoint(x, y int) Point {
 }
 
 var botsPos = map[Point]bot.Bot{}
+var rows = 20
+var cols = 40
 
 func main() {
-	bot1 := bot.NewBot("Bot1")
+	generateBots(rows, cols)
 
-	fmt.Println("=== Arena ===")
-	fmt.Printf("🤖 Bot %s | HP: %d\n", bot1.Name, bot1.Hp)
 	for {
+		botsActions()
 		renderMap()
-		time.Sleep(3 * time.Second)
+		time.Sleep(1 * time.Millisecond)
 	}
+}
+
+func botsActions() {
+	moves := make(map[Point]bot.Bot)
+
+	for pos, bot := range botsPos {
+		newPos := botNewPos(pos)
+
+		if newPos.X == cols-1 || newPos.Y == rows {
+			moves[pos] = bot
+			continue
+		}
+
+		if _, occupied := botsPos[newPos]; occupied {
+			moves[pos] = bot
+			continue
+		}
+
+		if _, planned := moves[newPos]; planned {
+			moves[pos] = bot
+			continue
+		}
+
+		moves[newPos] = bot
+	}
+
+	botsPos = moves
+}
+
+func right(pos Point) Point {
+	dirs := []Point{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
+	dir := dirs[rand.Intn(len(dirs))]
+	newPos := NewPoint(pos.X+1, pos.Y+dir.Y)
+	return newPos
+}
+
+func botNewPos(pos Point) Point {
+	dirs := []Point{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
+	dir := dirs[rand.Intn(len(dirs))]
+	newPos := NewPoint(pos.X+dir.X, pos.Y+dir.Y)
+	return newPos
+}
+
+func hasBot(newPos Point) bool {
+	_, ok := botsPos[newPos]
+	return ok
 }
 
 func renderMap() {
 	clearScreen()
-	rows := 20
-	cols := 40
-
-	// Generate bots
-
-	for r := range rows {
-		for c := range cols { if r == 0 || r == rows || c == 0 || c == cols-1 {
-				continue
-			}
-			if rand.Intn(100) > 3 {
-				continue
-			}
-
-			botName := "Bot" + strconv.Itoa(r) + strconv.Itoa(c)
-			botsPos[NewPoint(r, c)] = bot.NewBot(botName)
-		}
-	}
+	fmt.Println("             === Arena ===")
 
 	for range cols {
 		fmt.Print("#")
@@ -62,8 +93,7 @@ func renderMap() {
 		fmt.Println()
 
 		for c := range cols {
-			p := NewPoint(r, c)
-			_, ok := botsPos[p]
+			_, ok := botsPos[NewPoint(c, r)]
 			if ok {
 				fmt.Print("b")
 				continue
@@ -79,6 +109,22 @@ func renderMap() {
 	fmt.Println()
 	for range cols {
 		fmt.Print("#")
+	}
+}
+
+func generateBots(rows int, cols int) {
+	for r := range rows {
+		for c := range cols {
+			if r == 0 || r == rows || c == 0 || c == cols-1 {
+				continue
+			}
+			if rand.Intn(100) > 3 {
+				continue
+			}
+
+			botName := "Bot" + strconv.Itoa(r) + strconv.Itoa(c)
+			botsPos[NewPoint(c, r)] = bot.NewBot(botName)
+		}
 	}
 }
 
