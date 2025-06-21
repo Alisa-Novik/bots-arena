@@ -15,7 +15,6 @@ func Test_drawGrid(t *testing.T) {
 	}
 }
 
-
 func Test_generateBots(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
@@ -28,4 +27,3 @@ func Test_generateBots(t *testing.T) {
 		})
 	}
 }
-
