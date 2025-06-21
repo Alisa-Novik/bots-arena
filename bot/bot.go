@@ -4,6 +4,8 @@ import "math/rand"
 
 type Direction [2]int
 
+type Genome [8]int
+
 var (
 	Up    = Direction{0, 1}
 	Right = Direction{1, 0}
@@ -13,20 +15,30 @@ var (
 
 var dirs = []Direction{Up, Right, Down, Left}
 
-func RandomDir() Direction {
-	return dirs[rand.Intn(4)]
-}
-
 type Bot struct {
-	Name string
-	Dir  Direction
-	Hp   int
+	Name   string
+	Dir    Direction
+	Genome Genome
+	Hp     int
 }
 
 func NewBot(name string) Bot {
 	return Bot{
-		Name: name,
-		Dir:  RandomDir(),
-		Hp:   100,
+		Name:   name,
+		Dir:    RandomDir(),
+		Genome: NewRandomGenome(),
+		Hp:     100,
 	}
+}
+
+func RandomDir() Direction {
+	return dirs[rand.Intn(4)]
+}
+
+func NewRandomGenome() Genome {
+	var g Genome
+	for i := range g {
+		g[i] = rand.Intn(64)
+	}
+	return g
 }

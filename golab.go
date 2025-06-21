@@ -1,13 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"golab/bot"
 	"math/rand"
+	"os"
 	"runtime"
 	"time"
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/go-gl/gltext"
 )
 
 const (
@@ -22,12 +25,14 @@ var directionMap = map[Position]bot.Direction{
 	{-1, 0}: bot.Left,
 }
 
-const logicStep = 100 * time.Millisecond
+const logicStep = 10 * time.Millisecond
 
 var lastLogic = time.Now()
+var font *gltext.Font
 
+// Camera
 var (
-	camX, camY float32 // world‑space origin of the view
+	camX, camY float32
 	camScale   float32 = 1.0
 
 	dragging               bool
@@ -51,11 +56,12 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 	if button != glfw.MouseButtonLeft {
 		return
 	}
-	if action == glfw.Press {
+	switch action {
+	case glfw.Press:
 		dragging = true
 		dragStartX, dragStartY = w.GetCursorPos()
 		camStartX, camStartY = camX, camY
-	} else if action == glfw.Release {
+	case glfw.Release:
 		dragging = false
 	}
 }
@@ -110,7 +116,12 @@ func main() {
 		panic(err)
 	}
 
-	// NEW: set 1 world-unit = 1 grid cell, square cells guaranteed
+	gl.Enable(gl.TEXTURE_2D) // lets glyph quads use the atlas
+	gl.Enable(gl.BLEND)      // allow alpha
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	font = loadFont("font.ttf")
+	Assert(font != nil, "Font can't be nil")
+
 	gl.MatrixMode(gl.PROJECTION)
 	gl.LoadIdentity()
 	gl.Ortho(0, float64(cols), 0, float64(rows), -1, 1)
@@ -119,6 +130,56 @@ func main() {
 
 	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
 	gameLoop(window)
+}
+
+func textAtWorld(wx, wy float32, s string) {
+	// 1) window size in pixels
+	winW, winH := appWindow.GetSize()
+
+	// 2) how big is one world‑unit on each axis right now?
+	cellPxX := float32(winW) / float32(cols) * camScale
+	cellPxY := float32(winH) / float32(rows) * camScale
+
+	// 3) world → pixel (include camera pan)
+	px := (wx - camX) * cellPxX
+	py := (wy - camY) * cellPxY
+
+	// tweak so the number sits roughly in the upper‑centre of the cell
+	px += cellPxX * 0.30
+	py += cellPxY * 0.55
+
+	// 4) draw in true pixel space
+	gl.MatrixMode(gl.PROJECTION)
+	gl.PushMatrix()
+	gl.LoadIdentity()
+	gl.Ortho(0, float64(winW), 0, float64(winH), -1, 1)
+
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.PushMatrix()
+	gl.LoadIdentity()
+
+	gl.Color3f(1, 1, 1)
+	font.Printf(px, py, s)
+
+	// 5) restore everything
+	gl.PopMatrix() // MODELVIEW
+	gl.MatrixMode(gl.PROJECTION)
+	gl.PopMatrix()
+	gl.MatrixMode(gl.MODELVIEW)
+}
+
+func loadFont(name string) *gltext.Font {
+	f, err := os.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	ft, err := gltext.LoadTruetype(f, 14, 32, 127, gltext.LeftToRight)
+	if err != nil {
+		panic(err)
+	}
+	return ft
 }
 
 func gameLoop(window *glfw.Window) {
@@ -143,31 +204,52 @@ func generateBots() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{c, r}
-			if isWall(pos) || rand.Intn(100) > 2 {
+			if isWall(pos) || rand.Intn(100) > 1 {
 				continue
 			}
-			bots[pos] = bot.NewBot("Bot 1")
+			bots[pos] = bot.NewBot("Bot")
 		}
 	}
 }
 
 func botsActions() {
-	newBots := make(map[Position]bot.Bot)
+	maxCmds := 5
+	cmdsDone := 0
+
 	for pos, b := range bots {
-		np := Position{pos.X + b.Dir[0], pos.Y + b.Dir[1]}
-
-		_, occ := bots[np]
-		_, plan := newBots[np]
-
-		if isWall(np) || occ || plan {
-			b.Dir = bot.RandomDir()
-			newBots[pos] = b
-			continue
+		// nextCmd := b.Genome[0]
+		nextCmd := 0
+		// this for is until I figure out working breaks
+		for cmdsDone < maxCmds {
+			if nextCmd >= 8 {
+				break
+			}
+			switch {
+			case nextCmd < 8:
+				moveNew(pos, b)
+				nextCmd += 1
+			}
+			cmdsDone++
 		}
-		b.Dir = bot.RandomDir()
-		newBots[np] = b
 	}
-	bots = newBots
+}
+
+func moveNew(pos Position, b bot.Bot) {
+	np := Position{pos.X + b.Dir[0], pos.Y + b.Dir[1]}
+
+	if isWall(np) || isBot(np) {
+		b.Dir = bot.RandomDir()
+		bots[pos] = b
+		return
+	}
+	b.Dir = bot.RandomDir()
+	delete(bots, pos)
+	bots[np] = b
+}
+
+func isBot(np Position) bool {
+	_, ok := bots[np]
+	return ok
 }
 
 func drawGrid() {
@@ -183,7 +265,7 @@ func drawGrid() {
 			}
 
 			if b, ok := bots[pos]; ok {
-				drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, b.Dir)
+				drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, b.Dir, b.Hp)
 				continue
 			}
 
@@ -193,7 +275,7 @@ func drawGrid() {
 	}
 }
 
-func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction) {
+func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.PushMatrix()
 
@@ -238,19 +320,8 @@ func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction) {
 	gl.End()
 
 	gl.PopMatrix()
-}
 
-func drawFin(w, h, y, r, g, b, x float32) {
-	finW := w * 0.6
-	finH := h * 0.2
-	finY := y - h*0.1
-	gl.Color3f(r, g, b)
-	gl.Begin(gl.QUADS)
-	gl.Vertex2f(x+w*0.2, finY)
-	gl.Vertex2f(x+w*0.2+finW, finY)
-	gl.Vertex2f(x+w*0.2+finW, finY+finH)
-	gl.Vertex2f(x+w*0.2, finY+finH)
-	gl.End()
+	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
 }
 
 func drawCell(x, y, r, g, b, w, h float32) {
@@ -265,4 +336,10 @@ func drawCell(x, y, r, g, b, w, h float32) {
 
 func isWall(pos Position) bool {
 	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
+}
+
+func Assert(cond bool, msg string) {
+	if !cond {
+		panic(msg)
+	}
 }
