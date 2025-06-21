@@ -25,7 +25,7 @@ var directionMap = map[Position]bot.Direction{
 	{-1, 0}: bot.Left,
 }
 
-const logicStep = 10 * time.Millisecond
+const logicStep = 100 * time.Millisecond
 
 var lastLogic = time.Now()
 var font *gltext.Font
@@ -212,44 +212,45 @@ func generateBots() {
 	}
 }
 
-func botsActions() {
-	maxCmds := 5
-	cmdsDone := 0
-
-	for pos, b := range bots {
-		// nextCmd := b.Genome[0]
-		nextCmd := 0
-		// this for is until I figure out working breaks
-		for cmdsDone < maxCmds {
-			if nextCmd >= 8 {
-				break
-			}
-			switch {
-			case nextCmd < 8:
-				moveNew(pos, b)
-				nextCmd += 1
-			}
-			cmdsDone++
-		}
-	}
-}
-
-func moveNew(pos Position, b bot.Bot) {
-	np := Position{pos.X + b.Dir[0], pos.Y + b.Dir[1]}
-
-	if isWall(np) || isBot(np) {
-		b.Dir = bot.RandomDir()
-		bots[pos] = b
-		return
-	}
+func tryMove(dst map[Position]bot.Bot, oldPos Position, b bot.Bot) Position {
 	b.Dir = bot.RandomDir()
-	delete(bots, pos)
-	bots[np] = b
+	newPos := Position{oldPos.X + b.Dir[0], oldPos.Y + b.Dir[1]}
+
+	blocked := isWall(newPos) ||
+		dst[newPos] != (bot.Bot{}) ||
+		(bots[newPos] != (bot.Bot{}) && newPos != oldPos)
+
+	if blocked {
+		dst[oldPos] = b
+		return oldPos
+	}
+
+	delete(dst, oldPos)
+	dst[newPos] = b
+	return newPos
 }
 
-func isBot(np Position) bool {
-	_, ok := bots[np]
-	return ok
+func botsActions() {
+	newBots := make(map[Position]bot.Bot)
+
+	for startPos, b := range bots {
+		botAction(startPos, b, newBots)
+	}
+
+	bots = newBots
+}
+
+func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
+	cmd := 0
+	cmds := 2
+	curPos := startPos
+	for cmds > 0 {
+		switch {
+		case cmd < 8:
+			curPos = tryMove(newBots, curPos, b)
+		}
+		cmds--
+	}
 }
 
 func drawGrid() {
