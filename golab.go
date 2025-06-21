@@ -1,133 +1,200 @@
 package main
 
 import (
-	"fmt"
 	"golab/bot"
 	"math/rand"
-	"strconv"
+	"runtime"
 	"time"
+
+	"github.com/go-gl/gl/v2.1/gl"
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
-type Point struct {
-	X int
-	Y int
+const (
+	rows = 20
+	cols = 40
+)
+
+var directionMap = map[Position]bot.Direction{
+	{0, 1}:  bot.Up,
+	{1, 0}:  bot.Right,
+	{0, -1}: bot.Down,
+	{-1, 0}: bot.Left,
 }
 
-func NewPoint(x, y int) Point {
-	return Point{X: x, Y: y}
-}
+type Position struct{ X, Y int }
 
-var botsPos = map[Point]bot.Bot{}
-var rows = 20
-var cols = 40
+var bots = map[Position]bot.Bot{}
+
+func init() { runtime.LockOSThread() }
 
 func main() {
-	generateBots(rows, cols)
+	rand.Seed(time.Now().UnixNano())
+	if err := glfw.Init(); err != nil {
+		panic(err)
+	}
+	defer glfw.Terminate()
 
-	for {
+	mon := glfw.GetPrimaryMonitor()
+	mode := mon.GetVideoMode()
+	screenW, screenH := mode.Width, mode.Height
+	glfw.WindowHint(glfw.ContextVersionMinor, 1)
+	window, err := glfw.CreateWindow(screenW, screenH, "Bot Arena", nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	window.MakeContextCurrent()
+	if err := gl.Init(); err != nil {
+		panic(err)
+	}
+
+	// NEW: set 1 world-unit = 1 grid cell, square cells guaranteed
+	gl.MatrixMode(gl.PROJECTION)
+	gl.LoadIdentity()
+	gl.Ortho(0, float64(cols), 0, float64(rows), -1, 1)
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.LoadIdentity()
+
+	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
+	gameLoop(window)
+}
+
+func gameLoop(window *glfw.Window) {
+	generateBots()
+	for !window.ShouldClose() {
+		gl.Clear(gl.COLOR_BUFFER_BIT)
 		botsActions()
-		renderMap()
-		time.Sleep(1 * time.Millisecond)
+		drawGrid()
+		window.SwapBuffers()
+		glfw.PollEvents()
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func generateBots() {
+	for r := range rows {
+		for c := range cols {
+			pos := Position{c, r}
+			if isWall(pos) || rand.Intn(100) > 2 {
+				continue
+			}
+			bots[pos] = bot.NewBot("Bot 1")
+		}
 	}
 }
 
 func botsActions() {
-	moves := make(map[Point]bot.Bot)
+	newBots := make(map[Position]bot.Bot)
+	for pos, b := range bots {
+		np := Position{pos.X + b.Dir[0], pos.Y + b.Dir[1]}
 
-	for pos, bot := range botsPos {
-		newPos := botNewPos(pos)
+		_, occ := bots[np]
+		_, plan := newBots[np]
 
-		if newPos.X == cols-1 || newPos.Y == rows {
-			moves[pos] = bot
+		if isWall(np) || occ || plan {
+			b.Dir = bot.RandomDir()
+			newBots[pos] = b
 			continue
 		}
-
-		if _, occupied := botsPos[newPos]; occupied {
-			moves[pos] = bot
-			continue
-		}
-
-		if _, planned := moves[newPos]; planned {
-			moves[pos] = bot
-			continue
-		}
-
-		moves[newPos] = bot
+		b.Dir = bot.RandomDir()
+		newBots[np] = b
 	}
-
-	botsPos = moves
+	bots = newBots
 }
 
-func right(pos Point) Point {
-	dirs := []Point{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
-	dir := dirs[rand.Intn(len(dirs))]
-	newPos := NewPoint(pos.X+1, pos.Y+dir.Y)
-	return newPos
-}
-
-func botNewPos(pos Point) Point {
-	dirs := []Point{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
-	dir := dirs[rand.Intn(len(dirs))]
-	newPos := NewPoint(pos.X+dir.X, pos.Y+dir.Y)
-	return newPos
-}
-
-func hasBot(newPos Point) bool {
-	_, ok := botsPos[newPos]
-	return ok
-}
-
-func renderMap() {
-	clearScreen()
-	fmt.Println("             === Arena ===")
-
-	for range cols {
-		fmt.Print("#")
-	}
-
-	for r := range rows {
-		if r == 0 {
-			continue
-		}
-
-		fmt.Println()
-
-		for c := range cols {
-			_, ok := botsPos[NewPoint(c, r)]
-			if ok {
-				fmt.Print("b")
-				continue
-			}
-
-			if c == 0 || c == cols-1 {
-				fmt.Print("#")
-				continue
-			}
-			fmt.Print(" ")
-		}
-	}
-	fmt.Println()
-	for range cols {
-		fmt.Print("#")
-	}
-}
-
-func generateBots(rows int, cols int) {
+func drawGrid() {
 	for r := range rows {
 		for c := range cols {
-			if r == 0 || r == rows || c == 0 || c == cols-1 {
-				continue
-			}
-			if rand.Intn(100) > 3 {
+			x := float32(c)
+			y := float32(r)
+			pos := Position{c, r}
+
+			if isWall(pos) {
+				drawCell(x, y, 0.7, 0.7, 0.7, 1, 1)
 				continue
 			}
 
-			botName := "Bot" + strconv.Itoa(r) + strconv.Itoa(c)
-			botsPos[NewPoint(c, r)] = bot.NewBot(botName)
+			if b, ok := bots[pos]; ok {
+				drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, b.Dir)
+				continue
+			}
+
+			// empty space
+			drawCell(x, y, 0.2, 0.2, 0.2, 1, 1)
 		}
 	}
 }
 
-func clearScreen() {
-	fmt.Print("\033[H\033[2J")
+func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction) {
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.PushMatrix()
+
+	// position + rotate around cell center
+	gl.Translatef(x+w/2, y+h/2, 0)
+	switch dir {
+	case bot.Right:
+		gl.Rotatef(270, 0, 0, 1)
+	case bot.Left:
+		gl.Rotatef(90, 0, 0, 1)
+	case bot.Down:
+		gl.Rotatef(180, 0, 0, 1)
+	}
+	gl.Translatef(-w/2, -h/2, 0)
+
+	// BODY in local 0..1 coords
+	gl.Color3f(r, g, b)
+	gl.Begin(gl.QUADS)
+	gl.Vertex2f(0, 0)
+	gl.Vertex2f(w, 0)
+	gl.Vertex2f(w, h)
+	gl.Vertex2f(0, h)
+	gl.End()
+
+	// EYES in local 0..1 coords
+	eyeW := w * 0.2
+	eyeH := h * 0.2
+	eyeY := h * 0.6
+
+	gl.Color3f(0, 0, 0)
+	gl.Begin(gl.QUADS)
+	// left eye
+	gl.Vertex2f(w*0.2, eyeY)
+	gl.Vertex2f(w*0.2+eyeW, eyeY)
+	gl.Vertex2f(w*0.2+eyeW, eyeY+eyeH)
+	gl.Vertex2f(w*0.2, eyeY+eyeH)
+	// right eye
+	gl.Vertex2f(w*0.6, eyeY)
+	gl.Vertex2f(w*0.6+eyeW, eyeY)
+	gl.Vertex2f(w*0.6+eyeW, eyeY+eyeH)
+	gl.Vertex2f(w*0.6, eyeY+eyeH)
+	gl.End()
+
+	gl.PopMatrix()
+}
+
+func drawFin(w, h, y, r, g, b, x float32) {
+	finW := w * 0.6
+	finH := h * 0.2
+	finY := y - h*0.1
+	gl.Color3f(r, g, b)
+	gl.Begin(gl.QUADS)
+	gl.Vertex2f(x+w*0.2, finY)
+	gl.Vertex2f(x+w*0.2+finW, finY)
+	gl.Vertex2f(x+w*0.2+finW, finY+finH)
+	gl.Vertex2f(x+w*0.2, finY+finH)
+	gl.End()
+}
+
+func drawCell(x, y, r, g, b, w, h float32) {
+	gl.Begin(gl.QUADS)
+	gl.Color3f(r, g, b)
+	gl.Vertex2f(x, y)
+	gl.Vertex2f(x+w, y)
+	gl.Vertex2f(x+w, y+h)
+	gl.Vertex2f(x, y+h)
+	gl.End()
+}
+
+func isWall(pos Position) bool {
+	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
 }
