@@ -22,6 +22,62 @@ var directionMap = map[Position]bot.Direction{
 	{-1, 0}: bot.Left,
 }
 
+const logicStep = 100 * time.Millisecond
+
+var lastLogic = time.Now()
+
+var (
+	camX, camY float32 // world‑space origin of the view
+	camScale   float32 = 1.0
+
+	dragging               bool
+	dragStartX, dragStartY float64
+	camStartX, camStartY   float32
+	appWindow              *glfw.Window
+)
+
+func scrollCallback(_ *glfw.Window, _ float64, yoff float64) {
+	f := 1 + float32(yoff)*0.1
+	camScale *= f
+	if camScale < 0.5 {
+		camScale = 0.5
+	}
+	if camScale > 4.0 {
+		camScale = 4.0
+	}
+}
+
+func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
+	if button != glfw.MouseButtonLeft {
+		return
+	}
+	if action == glfw.Press {
+		dragging = true
+		dragStartX, dragStartY = w.GetCursorPos()
+		camStartX, camStartY = camX, camY
+	} else if action == glfw.Release {
+		dragging = false
+	}
+}
+
+func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
+	if !dragging {
+		return
+	}
+	winW, winH := w.GetSize()
+	dx := xpos - dragStartX
+	dy := ypos - dragStartY
+	camX = camStartX - float32(dx)*float32(cols)/float32(winW)/camScale
+	camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale // y axis is flipped
+}
+
+func applyCamera() {
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.LoadIdentity()
+	gl.Scalef(camScale, camScale, 1)
+	gl.Translatef(-camX, -camY, 0)
+}
+
 type Position struct{ X, Y int }
 
 var bots = map[Position]bot.Bot{}
@@ -40,10 +96,16 @@ func main() {
 	screenW, screenH := mode.Width, mode.Height
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)
 	window, err := glfw.CreateWindow(screenW, screenH, "Bot Arena", nil, nil)
+	appWindow = window
+	window.SetScrollCallback(scrollCallback)
+	window.SetMouseButtonCallback(mouseButtonCallback)
+	window.SetCursorPosCallback(cursorPosCallback)
+
 	if err != nil {
 		panic(err)
 	}
 	window.MakeContextCurrent()
+	glfw.SwapInterval(1)
 	if err := gl.Init(); err != nil {
 		panic(err)
 	}
@@ -62,12 +124,18 @@ func main() {
 func gameLoop(window *glfw.Window) {
 	generateBots()
 	for !window.ShouldClose() {
+		now := time.Now()
+
+		for now.Sub(lastLogic) >= logicStep {
+			botsActions()
+			lastLogic = lastLogic.Add(logicStep)
+		}
+
 		gl.Clear(gl.COLOR_BUFFER_BIT)
-		botsActions()
+		applyCamera()
 		drawGrid()
 		window.SwapBuffers()
 		glfw.PollEvents()
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
