@@ -1,0 +1,14 @@
+# Ignore built binaries and other build outputs
+# Specific test binary
+
+test
+
+# Executable files
+*.exe
+
+# Go build output
+*.test
+*.out
+bin/
+dist/
+build/
