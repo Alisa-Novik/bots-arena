@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"golab/board"
 	"golab/bot"
 	"math/rand"
 	"os"
@@ -13,22 +14,26 @@ import (
 	"github.com/go-gl/gltext"
 )
 
+type Position = board.Position
+type Board = board.Board
+
 const (
 	rows = 20
 	cols = 40
 )
 
-var directionMap = map[Position]bot.Direction{
-	{0, 1}:  bot.Up,
-	{1, 0}:  bot.Right,
-	{0, -1}: bot.Down,
-	{-1, 0}: bot.Left,
+var directionMap = map[board.Position]bot.Direction{
+	{X: 0, Y: 1}:  bot.Up,
+	{X: 1, Y: 0}:  bot.Right,
+	{X: 0, Y: -1}: bot.Down,
+	{X: -1, Y: 0}: bot.Left,
 }
 
-const logicStep = 100 * time.Millisecond
+const logicStep = 300 * time.Millisecond
 
 var lastLogic = time.Now()
 var font *gltext.Font
+var brd Board = *board.NewBoard()
 
 // Camera
 var (
@@ -84,14 +89,11 @@ func applyCamera() {
 	gl.Translatef(-camX, -camY, 0)
 }
 
-type Position struct{ X, Y int }
-
 var bots = map[Position]bot.Bot{}
 
 func init() { runtime.LockOSThread() }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	if err := glfw.Init(); err != nil {
 		panic(err)
 	}
@@ -119,7 +121,7 @@ func main() {
 	gl.Enable(gl.TEXTURE_2D) // lets glyph quads use the atlas
 	gl.Enable(gl.BLEND)      // allow alpha
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-	font = loadFont("font.ttf")
+	font = loadFont("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf")
 	Assert(font != nil, "Font can't be nil")
 
 	gl.MatrixMode(gl.PROJECTION)
@@ -133,22 +135,19 @@ func main() {
 }
 
 func textAtWorld(wx, wy float32, s string) {
-	// 1) window size in pixels
 	winW, winH := appWindow.GetSize()
 
-	// 2) how big is one world‑unit on each axis right now?
 	cellPxX := float32(winW) / float32(cols) * camScale
 	cellPxY := float32(winH) / float32(rows) * camScale
 
-	// 3) world → pixel (include camera pan)
 	px := (wx - camX) * cellPxX
 	py := (wy - camY) * cellPxY
 
-	// tweak so the number sits roughly in the upper‑centre of the cell
-	px += cellPxX * 0.30
-	py += cellPxY * 0.55
+	px += cellPxX * 0.30 // horizontal offset in the cell
+	py += cellPxY * 0.55 // vertical offset
 
-	// 4) draw in true pixel space
+	py = float32(winH) - py // <-- flip Y so 0 = top edge
+
 	gl.MatrixMode(gl.PROJECTION)
 	gl.PushMatrix()
 	gl.LoadIdentity()
@@ -161,7 +160,6 @@ func textAtWorld(wx, wy float32, s string) {
 	gl.Color3f(1, 1, 1)
 	font.Printf(px, py, s)
 
-	// 5) restore everything
 	gl.PopMatrix() // MODELVIEW
 	gl.MatrixMode(gl.PROJECTION)
 	gl.PopMatrix()
@@ -175,7 +173,7 @@ func loadFont(name string) *gltext.Font {
 	}
 	defer f.Close()
 
-	ft, err := gltext.LoadTruetype(f, 14, 32, 127, gltext.LeftToRight)
+	ft, err := gltext.LoadTruetype(f, 24, 32, 127, gltext.LeftToRight)
 	if err != nil {
 		panic(err)
 	}
@@ -184,6 +182,8 @@ func loadFont(name string) *gltext.Font {
 
 func gameLoop(window *glfw.Window) {
 	generateBots()
+	generateFood()
+	populateBoard()
 	for !window.ShouldClose() {
 		now := time.Now()
 
@@ -200,23 +200,57 @@ func gameLoop(window *glfw.Window) {
 	}
 }
 
+func generateFood() {
+	for r := range rows {
+		for c := range cols {
+			pos := Position{X: c, Y: r}
+			if !brd.IsEmpty(pos) || brd.InBounds(pos) || rand.Intn(100) > 1 {
+				continue
+			}
+			brd.Set(pos, board.Food{Pos: pos})
+		}
+	}
+}
+
+func populateBoard() {
+	for r := range rows {
+		for c := range cols {
+			pos := Position{X: c, Y: r}
+
+			if !brd.InBounds(pos) {
+				brd.Set(pos, board.Wall{Pos: pos})
+				continue
+			}
+
+			if bot, hasBot := bots[pos]; hasBot {
+				brd.Set(pos, bot)
+				continue
+			}
+
+			brd.Set(pos, board.Wall{Pos: pos})
+		}
+	}
+}
+
 func generateBots() {
 	for r := range rows {
 		for c := range cols {
-			pos := Position{c, r}
-			if isWall(pos) || rand.Intn(100) > 1 {
+			pos := Position{X: c, Y: r}
+			if brd.InBounds(pos) || rand.Intn(100) > 1 {
 				continue
 			}
-			bots[pos] = bot.NewBot("Bot")
+			b := bot.NewBot("bot")
+			brd.Set(pos, b)
+			bots[pos] = b
 		}
 	}
 }
 
 func tryMove(dst map[Position]bot.Bot, oldPos Position, b bot.Bot) Position {
 	b.Dir = bot.RandomDir()
-	newPos := Position{oldPos.X + b.Dir[0], oldPos.Y + b.Dir[1]}
+	newPos := Position{X: oldPos.X + b.Dir[0], Y: oldPos.Y + b.Dir[1]}
 
-	blocked := isWall(newPos) ||
+	blocked := brd.InBounds(newPos) ||
 		dst[newPos] != (bot.Bot{}) ||
 		(bots[newPos] != (bot.Bot{}) && newPos != oldPos)
 
@@ -242,15 +276,26 @@ func botsActions() {
 
 func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
 	cmd := 0
-	cmds := 2
+	cmds := 1
 	curPos := startPos
+
 	for cmds > 0 {
 		switch {
 		case cmd < 8:
 			curPos = tryMove(newBots, curPos, b)
+		case cmd < 16:
+			curPos = lookAround(newBots, curPos, b)
+			// case cmd < 24:
+			// 	curPos = grab()
+			// case cmd < 64:
+			// 	curPos = other()
 		}
 		cmds--
 	}
+}
+
+func lookAround(newBots map[Position]bot.Bot, curPos Position, b bot.Bot) Position {
+	panic("unimplemented")
 }
 
 func drawGrid() {
@@ -258,11 +303,21 @@ func drawGrid() {
 		for c := range cols {
 			x := float32(c)
 			y := float32(r)
-			pos := Position{c, r}
+			pos := Position{X: c, Y: r}
 
-			if isWall(pos) {
+			if brd.InBounds(pos) {
 				drawCell(x, y, 0.7, 0.7, 0.7, 1, 1)
 				continue
+			}
+
+			if !brd.IsEmpty(pos) {
+				switch v := brd.At(pos).(type) {
+				case bot.Bot:
+					fmt.Printf("Hp %d", v.Hp)
+					drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, v.Dir, v.Hp)
+				case board.Food:
+					drawCell(x, y, 0.8, 0.8, 0.2, 1, 1)
+				}
 			}
 
 			if b, ok := bots[pos]; ok {
@@ -333,10 +388,6 @@ func drawCell(x, y, r, g, b, w, h float32) {
 	gl.Vertex2f(x+w, y+h)
 	gl.Vertex2f(x, y+h)
 	gl.End()
-}
-
-func isWall(pos Position) bool {
-	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
 }
 
 func Assert(cond bool, msg string) {
