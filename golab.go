@@ -15,12 +15,6 @@ const (
 	cols = 40
 )
 
-var directionMap = map[Position]bot.Direction{
-	{0, 1}:  bot.Up,
-	{1, 0}:  bot.Right,
-	{0, -1}: bot.Down,
-	{-1, 0}: bot.Left,
-}
 
 const logicStep = 100 * time.Millisecond
 
