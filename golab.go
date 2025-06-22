@@ -204,7 +204,7 @@ func generateFood() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
-			if !brd.IsEmpty(pos) || brd.InBounds(pos) || rand.Intn(100) > 1 {
+			if !brd.IsEmpty(pos) || brd.IsWall(pos) || rand.Intn(100) > 1 {
 				continue
 			}
 			brd.Set(pos, board.Food{Pos: pos})
@@ -217,7 +217,7 @@ func populateBoard() {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
 
-			if !brd.InBounds(pos) {
+			if !brd.IsWall(pos) {
 				brd.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
@@ -236,7 +236,7 @@ func generateBots() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
-			if brd.InBounds(pos) || rand.Intn(100) > 1 {
+			if brd.IsWall(pos) || rand.Intn(100) > 1 {
 				continue
 			}
 			b := bot.NewBot("bot")
@@ -250,7 +250,7 @@ func tryMove(dst map[Position]bot.Bot, oldPos Position, b bot.Bot) Position {
 	b.Dir = bot.RandomDir()
 	newPos := Position{X: oldPos.X + b.Dir[0], Y: oldPos.Y + b.Dir[1]}
 
-	blocked := brd.InBounds(newPos) ||
+	blocked := brd.IsWall(newPos) ||
 		dst[newPos] != (bot.Bot{}) ||
 		(bots[newPos] != (bot.Bot{}) && newPos != oldPos)
 
@@ -305,7 +305,7 @@ func drawGrid() {
 			y := float32(r)
 			pos := Position{X: c, Y: r}
 
-			if brd.InBounds(pos) {
+			if brd.IsWall(pos) {
 				drawCell(x, y, 0.7, 0.7, 0.7, 1, 1)
 				continue
 			}
