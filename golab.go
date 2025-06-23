@@ -204,7 +204,7 @@ func generateFood() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
-			if !brd.IsEmpty(pos) || brd.IsWall(pos) || rand.Intn(100) > 1 {
+			if !brd.IsEmpty(pos) || brd.IsWall(pos) || rand.Intn(100) > 10 {
 				continue
 			}
 			brd.Set(pos, board.Food{Pos: pos})
@@ -217,7 +217,7 @@ func populateBoard() {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
 
-			if !brd.IsWall(pos) {
+			if brd.IsWall(pos) {
 				brd.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
@@ -226,8 +226,6 @@ func populateBoard() {
 				brd.Set(pos, bot)
 				continue
 			}
-
-			brd.Set(pos, board.Wall{Pos: pos})
 		}
 	}
 }
@@ -268,6 +266,11 @@ func botsActions() {
 	newBots := make(map[Position]bot.Bot)
 
 	for startPos, b := range bots {
+		b.Hp -= 1
+		if b.Hp <= 0 {
+			delete(bots, startPos)
+			continue
+		}
 		botAction(startPos, b, newBots)
 	}
 
@@ -275,7 +278,8 @@ func botsActions() {
 }
 
 func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
-	cmd := 0
+	cmd := 9
+	// cmd := rand.Intn(25)
 	cmds := 1
 	curPos := startPos
 
@@ -283,15 +287,37 @@ func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
 		switch {
 		case cmd < 8:
 			curPos = tryMove(newBots, curPos, b)
-		case cmd < 16:
-			curPos = lookAround(newBots, curPos, b)
-			// case cmd < 24:
-			// 	curPos = grab()
+		// case cmd < 16:
+		// 	curPos = lookAround(newBots, curPos, b)
+		case cmd < 24:
+			grab(newBots, curPos, b)
 			// case cmd < 64:
 			// 	curPos = other()
 		}
 		cmds--
 	}
+}
+
+func grab(newBots map[Position]bot.Bot, pos Position, b bot.Bot) {
+	positions := [8][2]int{
+		// x, y clockwise
+		{0, 1}, {1, 1}, {1, 0}, {1, -1},
+		{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
+	}
+	for _, d := range positions {
+		dx, dy := d[0], d[1]
+		grabPos := board.NewPosition(pos.Y+dy, pos.X+dx)
+		if brd.IsFood(grabPos) {
+			fmt.Printf("Bot position: %v; ", pos)
+			fmt.Printf("Food position: %v; ", grabPos)
+			fmt.Printf("dx: %d; ", dx)
+			fmt.Printf("dy: %d; ", dy)
+			fmt.Println("isFood")
+			b.Hp += 10
+			brd.Set(grabPos, nil)
+		}
+	}
+	newBots[pos] = b
 }
 
 func lookAround(newBots map[Position]bot.Bot, curPos Position, b bot.Bot) Position {
@@ -305,6 +331,11 @@ func drawGrid() {
 			y := float32(r)
 			pos := Position{X: c, Y: r}
 
+			if brd.IsFood(pos) {
+				drawCell(x, y, 0.2, 0.7, 0.2, 1, 1)
+				continue
+			}
+
 			if brd.IsWall(pos) {
 				drawCell(x, y, 0.7, 0.7, 0.7, 1, 1)
 				continue
@@ -313,10 +344,10 @@ func drawGrid() {
 			if !brd.IsEmpty(pos) {
 				switch v := brd.At(pos).(type) {
 				case bot.Bot:
-					fmt.Printf("Hp %d", v.Hp)
 					drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, v.Dir, v.Hp)
 				case board.Food:
-					drawCell(x, y, 0.8, 0.8, 0.2, 1, 1)
+					fmt.Printf("RenFood")
+					drawFood(x, y, 0.8, 0.8, 0.2, 0.5, 0.5)
 				}
 			}
 
@@ -378,6 +409,21 @@ func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
 	gl.PopMatrix()
 
 	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
+}
+
+func drawFood(x, y, r, g, b, w, h float32) {
+	w *= 0.5
+	h *= 0.5
+	ox := w * 0.5
+	oy := h * 0.5
+
+	gl.Begin(gl.QUADS)
+	gl.Color3f(r, g, b)
+	gl.Vertex2f(x+ox, y+oy)
+	gl.Vertex2f(x+ox+w, y+oy)
+	gl.Vertex2f(x+ox+w, y+oy+h)
+	gl.Vertex2f(x+ox, y+oy+h)
+	gl.End()
 }
 
 func drawCell(x, y, r, g, b, w, h float32) {

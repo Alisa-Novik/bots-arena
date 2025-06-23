@@ -13,12 +13,12 @@ type Board struct {
 	grid map[Position]Occupant
 }
 
-func (b Board) SyncBots(bots map[Position]bot.Bot) {
+func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
 	for r := range rows {
 		for c := range cols {
 			pos := NewPosition(r, c)
 			if b.isBot(pos) {
-				bots[pos] = b.At(pos).(bot.Bot)
+				botsMap[pos] = b.At(pos).(bot.Bot)
 			}
 		}
 	}
@@ -60,6 +60,14 @@ func (b *Board) At(pos Position) Occupant {
 
 func (b *Board) IsWall(pos Position) bool {
 	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
+}
+
+func (b *Board) IsFood(pos Position) bool {
+	if b.IsEmpty(pos) {
+		return false
+	}
+	_, ok := b.At(pos).(Food)
+	return ok
 }
 
 func (b *Board) isBot(pos Position) bool {
