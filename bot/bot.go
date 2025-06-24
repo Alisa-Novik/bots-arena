@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"fmt"
 	"math/rand"
 )
 
@@ -41,9 +40,6 @@ func (b *Bot) PointerJump() {
 	nextPtr := ptr + toAdd
 	nextPtr %= genomeMatrixCells
 
-	fmt.Println()
-	fmt.Printf("ptr: %d; toAdd: %d; nextPtr: %d;", ptr, toAdd, nextPtr)
-	fmt.Println()
 	b.Genome.Pointer = nextPtr
 }
 
@@ -53,7 +49,7 @@ func NewBot(name string) Bot {
 		Dir:       RandomDir(),
 		Genome:    NewRandomGenome(),
 		Inventory: NewEmptyInventory(),
-		Hp:        100,
+		Hp:        50,
 	}
 }
 

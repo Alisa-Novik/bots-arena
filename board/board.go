@@ -16,8 +16,8 @@ type Board struct {
 }
 
 func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
-	for r := range rows {
-		for c := range cols {
+	for r := range Rows {
+		for c := range Cols {
 			pos := NewPosition(r, c)
 			if b.isBot(pos) {
 				botsMap[pos] = b.At(pos).(bot.Bot)
@@ -29,8 +29,8 @@ func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
 type Occupant interface{}
 
 const (
-	rows = 20
-	cols = 40
+	Rows = 40
+	Cols = 60
 )
 
 var PosClock = [8][2]int{
@@ -67,7 +67,7 @@ func (b *Board) At(pos Position) Occupant {
 }
 
 func (b *Board) IsWall(pos Position) bool {
-	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
+	return pos.X == 0 || pos.Y == 0 || pos.X == Cols-1 || pos.Y == Rows-1
 }
 
 func (b *Board) IsResource(pos Position) bool {

@@ -14,15 +14,27 @@ import (
 	"github.com/go-gl/gltext"
 )
 
+type GenerationConfig struct {
+	BotChance       int
+	ResourceChance  int
+	NewGenThreshold int
+}
+
+var genConf GenerationConfig = GenerationConfig{
+	BotChance:       10,
+	ResourceChance:  10,
+	NewGenThreshold: 5,
+}
+
 type Position = board.Position
 type Board = board.Board
 
 const (
-	rows = 20
-	cols = 40
+	rows = board.Rows
+	cols = board.Cols
 )
 
-const logicStep = 30 * time.Millisecond
+const logicStep = 3 * time.Millisecond
 
 var lastLogic = time.Now()
 var font *gltext.Font
@@ -174,13 +186,16 @@ func loadFont(name string) *gltext.Font {
 }
 
 func gameLoop(window *glfw.Window) {
-	generateBots()
-	generateResource()
+	newGeneration()
 	populateBoard()
+
 	for !window.ShouldClose() {
 		now := time.Now()
 
 		for now.Sub(lastLogic) >= logicStep {
+			if len(bots) < genConf.NewGenThreshold {
+				newGeneration()
+			}
 			botsActions()
 			lastLogic = lastLogic.Add(logicStep)
 		}
@@ -190,18 +205,6 @@ func gameLoop(window *glfw.Window) {
 		drawGrid()
 		window.SwapBuffers()
 		glfw.PollEvents()
-	}
-}
-
-func generateResource() {
-	for r := range rows {
-		for c := range cols {
-			pos := Position{X: c, Y: r}
-			if !brd.IsEmpty(pos) || brd.IsWall(pos) || rand.Intn(100) > 10 {
-				continue
-			}
-			brd.Set(pos, board.Resource{Pos: pos, Amount: 10})
-		}
 	}
 }
 
@@ -219,15 +222,39 @@ func populateBoard() {
 				brd.Set(pos, bot)
 				continue
 			}
+
+			if !brd.IsEmpty(pos) || rollResourceGen() {
+				brd.Set(pos, board.Resource{Pos: pos, Amount: 10})
+				continue
+			}
 		}
 	}
+}
+
+func rollBotGen() bool {
+	return rand.Intn(100) > 100-genConf.BotChance
+}
+
+func rollResourceGen() bool {
+	return rand.Intn(100) > 100-genConf.ResourceChance
+}
+
+func newGeneration() {
+	if len(bots) == 0 {
+		generateBots()
+		return
+	}
+
+	brd = *board.NewBoard()
+	generateBots()
+	populateBoard()
 }
 
 func generateBots() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
-			if brd.IsWall(pos) || rand.Intn(100) > 10 {
+			if !brd.IsEmpty(pos) || !rollBotGen() {
 				continue
 			}
 			b := bot.NewBot("bot")
