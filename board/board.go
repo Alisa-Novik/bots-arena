@@ -7,8 +7,10 @@ import (
 type Position struct{ X, Y int }
 
 type Wall struct{ Pos Position }
-type Poison struct{ Pos Position }
-type Food struct{ Pos Position }
+type Resource struct {
+	Pos    Position
+	Amount int
+}
 type Board struct {
 	grid map[Position]Occupant
 }
@@ -30,6 +32,12 @@ const (
 	rows = 20
 	cols = 40
 )
+
+var PosClock = [8][2]int{
+	// x, y clockwise
+	{0, 1}, {1, 1}, {1, 0}, {1, -1},
+	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
+}
 
 func NewPosition(r, c int) Position {
 	return Position{X: c, Y: r}
@@ -62,11 +70,11 @@ func (b *Board) IsWall(pos Position) bool {
 	return pos.X == 0 || pos.Y == 0 || pos.X == cols-1 || pos.Y == rows-1
 }
 
-func (b *Board) IsFood(pos Position) bool {
+func (b *Board) IsResource(pos Position) bool {
 	if b.IsEmpty(pos) {
 		return false
 	}
-	_, ok := b.At(pos).(Food)
+	_, ok := b.At(pos).(Resource)
 	return ok
 }
 

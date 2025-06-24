@@ -1,10 +1,18 @@
 package bot
 
-import "math/rand"
+import (
+	"fmt"
+	"math/rand"
+)
 
 type Direction [2]int
 
-type Genome [8]int
+const genomeMatrixCells = 64
+
+type Genome struct {
+	Matrix  [genomeMatrixCells]int
+	Pointer int
+}
 
 var (
 	Up    = Direction{0, 1}
@@ -15,20 +23,42 @@ var (
 
 var dirs = []Direction{Up, Right, Down, Left}
 
+type Inventory struct {
+	Amount int
+}
+
 type Bot struct {
-	Name   string
-	Dir    Direction
-	Genome Genome
-	Hp     int
+	Name      string
+	Dir       Direction
+	Genome    Genome
+	Inventory Inventory
+	Hp        int
+}
+
+func (b *Bot) PointerJump() {
+	ptr := b.Genome.Pointer
+	toAdd := b.Genome.Matrix[ptr]
+	nextPtr := ptr + toAdd
+	nextPtr %= genomeMatrixCells
+
+	fmt.Println()
+	fmt.Printf("ptr: %d; toAdd: %d; nextPtr: %d;", ptr, toAdd, nextPtr)
+	fmt.Println()
+	b.Genome.Pointer = nextPtr
 }
 
 func NewBot(name string) Bot {
 	return Bot{
-		Name:   name,
-		Dir:    RandomDir(),
-		Genome: NewRandomGenome(),
-		Hp:     100,
+		Name:      name,
+		Dir:       RandomDir(),
+		Genome:    NewRandomGenome(),
+		Inventory: NewEmptyInventory(),
+		Hp:        100,
 	}
+}
+
+func NewEmptyInventory() Inventory {
+	return Inventory{Amount: 0}
 }
 
 func RandomDir() Direction {
@@ -37,8 +67,9 @@ func RandomDir() Direction {
 
 func NewRandomGenome() Genome {
 	var g Genome
-	for i := range g {
-		g[i] = rand.Intn(64)
+	for i := range g.Matrix {
+		g.Matrix[i] = rand.Intn(64)
 	}
+	g.Pointer = rand.Intn(genomeMatrixCells)
 	return g
 }

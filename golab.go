@@ -22,14 +22,7 @@ const (
 	cols = 40
 )
 
-var directionMap = map[board.Position]bot.Direction{
-	{X: 0, Y: 1}:  bot.Up,
-	{X: 1, Y: 0}:  bot.Right,
-	{X: 0, Y: -1}: bot.Down,
-	{X: -1, Y: 0}: bot.Left,
-}
-
-const logicStep = 300 * time.Millisecond
+const logicStep = 30 * time.Millisecond
 
 var lastLogic = time.Now()
 var font *gltext.Font
@@ -182,7 +175,7 @@ func loadFont(name string) *gltext.Font {
 
 func gameLoop(window *glfw.Window) {
 	generateBots()
-	generateFood()
+	generateResource()
 	populateBoard()
 	for !window.ShouldClose() {
 		now := time.Now()
@@ -200,14 +193,14 @@ func gameLoop(window *glfw.Window) {
 	}
 }
 
-func generateFood() {
+func generateResource() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
 			if !brd.IsEmpty(pos) || brd.IsWall(pos) || rand.Intn(100) > 10 {
 				continue
 			}
-			brd.Set(pos, board.Food{Pos: pos})
+			brd.Set(pos, board.Resource{Pos: pos, Amount: 10})
 		}
 	}
 }
@@ -234,7 +227,7 @@ func generateBots() {
 	for r := range rows {
 		for c := range cols {
 			pos := Position{X: c, Y: r}
-			if brd.IsWall(pos) || rand.Intn(100) > 1 {
+			if brd.IsWall(pos) || rand.Intn(100) > 10 {
 				continue
 			}
 			b := bot.NewBot("bot")
@@ -249,6 +242,7 @@ func tryMove(dst map[Position]bot.Bot, oldPos Position, b bot.Bot) Position {
 	newPos := Position{X: oldPos.X + b.Dir[0], Y: oldPos.Y + b.Dir[1]}
 
 	blocked := brd.IsWall(newPos) ||
+		!brd.IsEmpty(newPos) ||
 		dst[newPos] != (bot.Bot{}) ||
 		(bots[newPos] != (bot.Bot{}) && newPos != oldPos)
 
@@ -278,43 +272,50 @@ func botsActions() {
 }
 
 func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
-	cmd := 9
-	// cmd := rand.Intn(25)
-	cmds := 1
 	curPos := startPos
+	shouldStop := false
 
-	for cmds > 0 {
+	cmds := 0
+	for !shouldStop {
+		ptr := b.Genome.Pointer
+		cmds++
 		switch {
-		case cmd < 8:
+		case ptr < 8:
+			b.PointerJump()
 			curPos = tryMove(newBots, curPos, b)
+			shouldStop = true
 		// case cmd < 16:
 		// 	curPos = lookAround(newBots, curPos, b)
-		case cmd < 24:
+		case ptr < 24:
+			b.PointerJump()
 			grab(newBots, curPos, b)
-			// case cmd < 64:
-			// 	curPos = other()
+			shouldStop = true
+		case ptr < 64:
+			if cmds > 8 {
+				shouldStop = true
+			}
+
+			b.PointerJump()
 		}
-		cmds--
 	}
 }
 
 func grab(newBots map[Position]bot.Bot, pos Position, b bot.Bot) {
-	positions := [8][2]int{
-		// x, y clockwise
-		{0, 1}, {1, 1}, {1, 0}, {1, -1},
-		{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
-	}
-	for _, d := range positions {
+	for _, d := range board.PosClock {
 		dx, dy := d[0], d[1]
 		grabPos := board.NewPosition(pos.Y+dy, pos.X+dx)
-		if brd.IsFood(grabPos) {
-			fmt.Printf("Bot position: %v; ", pos)
-			fmt.Printf("Food position: %v; ", grabPos)
-			fmt.Printf("dx: %d; ", dx)
-			fmt.Printf("dy: %d; ", dy)
-			fmt.Println("isFood")
-			b.Hp += 10
+		if !brd.IsResource(grabPos) {
+			continue
+		}
+		resource := brd.At(grabPos).(board.Resource)
+
+		b.Inventory.Amount += 1
+		b.Hp += 10
+		resource.Amount -= 1
+		if resource.Amount == 0 {
 			brd.Set(grabPos, nil)
+		} else {
+			brd.Set(grabPos, resource)
 		}
 	}
 	newBots[pos] = b
@@ -331,8 +332,8 @@ func drawGrid() {
 			y := float32(r)
 			pos := Position{X: c, Y: r}
 
-			if brd.IsFood(pos) {
-				drawCell(x, y, 0.2, 0.7, 0.2, 1, 1)
+			if brd.IsResource(pos) {
+				drawCell(x, y, 0.1, 0.2, 0.3, 1, 1)
 				continue
 			}
 
@@ -345,9 +346,8 @@ func drawGrid() {
 				switch v := brd.At(pos).(type) {
 				case bot.Bot:
 					drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, v.Dir, v.Hp)
-				case board.Food:
-					fmt.Printf("RenFood")
-					drawFood(x, y, 0.8, 0.8, 0.2, 0.5, 0.5)
+				case board.Resource:
+					drawResource(x, y, 0.8, 0.8, 0.8, 0.5, 0.5)
 				}
 			}
 
@@ -411,7 +411,7 @@ func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
 	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
 }
 
-func drawFood(x, y, r, g, b, w, h float32) {
+func drawResource(x, y, r, g, b, w, h float32) {
 	w *= 0.5
 	h *= 0.5
 	ox := w * 0.5
