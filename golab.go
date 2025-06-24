@@ -223,7 +223,11 @@ func populateBoard() {
 				continue
 			}
 
-			if !brd.IsEmpty(pos) || rollResourceGen() {
+			if !brd.IsEmpty(pos) {
+				continue
+			}
+
+			if rollResourceGen() {
 				brd.Set(pos, board.Resource{Pos: pos, Amount: 10})
 				continue
 			}
@@ -311,11 +315,15 @@ func botAction(startPos Position, b bot.Bot, newBots map[Position]bot.Bot) {
 			b.PointerJump()
 			curPos = tryMove(newBots, curPos, b)
 			shouldStop = true
-		// case cmd < 16:
-		// 	curPos = lookAround(newBots, curPos, b)
+			// case cmd < 16:
+			// 	curPos = lookAround(newBots, curPos, b)
 		case ptr < 24:
 			b.PointerJump()
 			grab(newBots, curPos, b)
+			shouldStop = true
+		case ptr < 32:
+			b.PointerJump()
+			buildStructure(newBots, curPos, b)
 			shouldStop = true
 		case ptr < 64:
 			if cmds > 8 {
@@ -348,6 +356,26 @@ func grab(newBots map[Position]bot.Bot, pos Position, b bot.Bot) {
 	newBots[pos] = b
 }
 
+func buildStructure(newBots map[Position]bot.Bot, pos Position, b bot.Bot) {
+	if b.Inventory.Amount < 5 {
+		newBots[pos] = b
+		return
+	}
+
+	for _, d := range board.PosClock {
+		dx, dy := d[0], d[1]
+		buildPos := board.NewPosition(pos.Y+dy, pos.X+dx)
+		if brd.IsWall(buildPos) || !brd.IsEmpty(buildPos) {
+			continue
+		}
+		brd.Set(buildPos, board.Building{Pos: buildPos, Hp: 20})
+		b.Inventory.Amount -= 5
+		break
+	}
+
+	newBots[pos] = b
+}
+
 func lookAround(newBots map[Position]bot.Bot, curPos Position, b bot.Bot) Position {
 	panic("unimplemented")
 }
@@ -375,6 +403,8 @@ func drawGrid() {
 					drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, v.Dir, v.Hp)
 				case board.Resource:
 					drawResource(x, y, 0.8, 0.8, 0.8, 0.5, 0.5)
+				case board.Building:
+					drawBuilding(x, y, 0.5, 0.4, 0.1, 1, 1)
 				}
 			}
 
@@ -450,6 +480,16 @@ func drawResource(x, y, r, g, b, w, h float32) {
 	gl.Vertex2f(x+ox+w, y+oy)
 	gl.Vertex2f(x+ox+w, y+oy+h)
 	gl.Vertex2f(x+ox, y+oy+h)
+	gl.End()
+}
+
+func drawBuilding(x, y, r, g, b, w, h float32) {
+	gl.Begin(gl.QUADS)
+	gl.Color3f(r, g, b)
+	gl.Vertex2f(x, y)
+	gl.Vertex2f(x+w, y)
+	gl.Vertex2f(x+w, y+h)
+	gl.Vertex2f(x, y+h)
 	gl.End()
 }
 

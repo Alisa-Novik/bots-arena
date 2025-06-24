@@ -11,6 +11,10 @@ type Resource struct {
 	Pos    Position
 	Amount int
 }
+type Building struct {
+	Pos Position
+	Hp  int
+}
 type Board struct {
 	grid map[Position]Occupant
 }
@@ -75,6 +79,14 @@ func (b *Board) IsResource(pos Position) bool {
 		return false
 	}
 	_, ok := b.At(pos).(Resource)
+	return ok
+}
+
+func (b *Board) IsBuilding(pos Position) bool {
+	if b.IsEmpty(pos) {
+		return false
+	}
+	_, ok := b.At(pos).(Building)
 	return ok
 }
 
