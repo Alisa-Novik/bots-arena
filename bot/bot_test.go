@@ -12,10 +12,7 @@ func TestRandomDirRange(t *testing.T) {
 }
 
 func TestNewBot(t *testing.T) {
-	b := NewBot("tester")
-	if b.Name != "tester" {
-		t.Errorf("expected name 'tester', got %q", b.Name)
-	}
+	b := NewBot()
 	if b.Hp != 100 {
 		t.Errorf("expected hp 100, got %d", b.Hp)
 	}

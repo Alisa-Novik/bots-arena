@@ -6,10 +6,13 @@ import (
 
 type Direction [2]int
 
-const genomeMatrixCells = 64
+const genomeLen = 64
+const genomeMaxValue = 64
+
+const botHp = 100
 
 type Genome struct {
-	Matrix  [genomeMatrixCells]int
+	Matrix  [genomeLen]int
 	Pointer int
 }
 
@@ -20,6 +23,13 @@ var (
 	Left  = Direction{-1, 0}
 )
 
+var IntToDir = map[int]Direction{
+	0: Up,
+	1: Right,
+	2: Down,
+	3: Left,
+}
+
 var dirs = []Direction{Up, Right, Down, Left}
 
 type Inventory struct {
@@ -27,30 +37,55 @@ type Inventory struct {
 }
 
 type Bot struct {
-	Name      string
 	Dir       Direction
 	Genome    Genome
 	Inventory Inventory
 	Hp        int
 }
 
-func (b *Bot) PointerJump() {
+func (b *Bot) PointerJumpBy(toAdd int) {
 	ptr := b.Genome.Pointer
-	toAdd := b.Genome.Matrix[ptr]
 	nextPtr := ptr + toAdd
-	nextPtr %= genomeMatrixCells
+	nextPtr %= genomeLen
 
 	b.Genome.Pointer = nextPtr
 }
 
-func NewBot(name string) Bot {
+func (b *Bot) PointerJump() {
+	ptr := b.Genome.Pointer
+	toAdd := b.Genome.Matrix[ptr]
+	nextPtr := ptr + toAdd
+	nextPtr %= genomeLen
+
+	b.Genome.Pointer = nextPtr
+}
+
+func NewBot() Bot {
 	return Bot{
-		Name:      name,
 		Dir:       RandomDir(),
 		Genome:    NewRandomGenome(),
 		Inventory: NewEmptyInventory(),
-		Hp:        50,
+		Hp:        botHp,
 	}
+}
+
+func (parent *Bot) NewChild() Bot {
+	return Bot{
+		Dir:       RandomDir(),
+		Genome:    NewMutatedGenome(parent.Genome),
+		Inventory: NewEmptyInventory(),
+		Hp:        botHp,
+	}
+}
+
+func NewMutatedGenome(genome Genome) Genome {
+	mutationIdx := rand.Intn(genomeLen)
+	for i := range genome.Matrix {
+		if i == mutationIdx {
+			genome.Matrix[i] = rand.Intn(genomeMaxValue)
+		}
+	}
+	return genome
 }
 
 func NewEmptyInventory() Inventory {
@@ -64,8 +99,8 @@ func RandomDir() Direction {
 func NewRandomGenome() Genome {
 	var g Genome
 	for i := range g.Matrix {
-		g.Matrix[i] = rand.Intn(64)
+		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
-	g.Pointer = rand.Intn(genomeMatrixCells)
+	g.Pointer = rand.Intn(genomeLen)
 	return g
 }

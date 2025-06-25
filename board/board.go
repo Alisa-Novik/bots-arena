@@ -1,7 +1,10 @@
 package board
 
 import (
+	"fmt"
 	"golab/bot"
+
+	"golang.org/x/exp/rand"
 )
 
 type Position struct{ X, Y int }
@@ -12,8 +15,9 @@ type Resource struct {
 	Amount int
 }
 type Building struct {
-	Pos Position
-	Hp  int
+	Pos   Position
+	Owner *bot.Bot
+	Hp    int
 }
 type Board struct {
 	grid map[Position]Occupant
@@ -32,15 +36,20 @@ func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
 
 type Occupant interface{}
 
+const scaleFactor = 1
 const (
-	Rows = 40
-	Cols = 60
+	Rows = 40 * scaleFactor
+	Cols = 60 * scaleFactor
 )
 
 var PosClock = [8][2]int{
 	// x, y clockwise
 	{0, 1}, {1, 1}, {1, 0}, {1, -1},
 	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
+}
+
+func NewRandomPosition() Position {
+	return Position{X: rand.Intn(Cols), Y: rand.Intn(Rows)}
 }
 
 func NewPosition(r, c int) Position {
@@ -53,6 +62,28 @@ func NewBoard() *Board {
 	}
 }
 
+func (b *Board) Print() {
+	for y := Rows - 1; y >= 0; y-- {
+		line := make([]rune, Cols)
+		for x := range Cols {
+			p := Position{X: x, Y: y}
+			switch {
+			case b.IsWall(p):
+				line[x] = '#'
+			case b.IsResource(p):
+				line[x] = 'R'
+			case b.IsBuilding(p):
+				line[x] = 'B'
+			case b.isBot(p):
+				line[x] = 'o'
+			default:
+				line[x] = '.'
+			}
+		}
+		fmt.Println(string(line))
+	}
+	fmt.Println()
+}
 func (b *Board) Set(pos Position, o Occupant) {
 	if o == nil {
 		delete(b.grid, pos)
