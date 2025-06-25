@@ -21,5 +21,5 @@ func main() {
 		ChildrenByBot:   3,
 	}
 	g := game.NewGame(conf)
-	g.Run()
+	g.HeadlessRun()
 }

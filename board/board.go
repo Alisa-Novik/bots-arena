@@ -1,9 +1,7 @@
 package board
 
 import (
-	"fmt"
 	"golab/bot"
-
 	"golang.org/x/exp/rand"
 )
 
@@ -34,7 +32,7 @@ func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
 	}
 }
 
-type Occupant interface{}
+type Occupant any
 
 const scaleFactor = 1
 const (
@@ -62,28 +60,6 @@ func NewBoard() *Board {
 	}
 }
 
-func (b *Board) Print() {
-	for y := Rows - 1; y >= 0; y-- {
-		line := make([]rune, Cols)
-		for x := range Cols {
-			p := Position{X: x, Y: y}
-			switch {
-			case b.IsWall(p):
-				line[x] = '#'
-			case b.IsResource(p):
-				line[x] = 'R'
-			case b.IsBuilding(p):
-				line[x] = 'B'
-			case b.isBot(p):
-				line[x] = 'o'
-			default:
-				line[x] = '.'
-			}
-		}
-		fmt.Println(string(line))
-	}
-	fmt.Println()
-}
 func (b *Board) Set(pos Position, o Occupant) {
 	if o == nil {
 		delete(b.grid, pos)

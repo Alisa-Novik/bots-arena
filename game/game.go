@@ -17,25 +17,49 @@ type GenerationConfig struct {
 }
 
 type Game struct {
-	Board     *board.Board
-	Bots      map[board.Position]bot.Bot
-	GenConf   GenerationConfig
-	lastLogic time.Time
+	Board        *board.Board
+	Bots         map[board.Position]bot.Bot
+	GenConf      GenerationConfig
+	MutableState map[string]int
+	lastLogic    time.Time
 }
 
 func NewGame(conf GenerationConfig) *Game {
 	return &Game{
-		Board:     board.NewBoard(),
-		Bots:      make(map[board.Position]bot.Bot),
-		GenConf:   conf,
-		lastLogic: time.Now(),
+		Board:        board.NewBoard(),
+		Bots:         make(map[board.Position]bot.Bot),
+		GenConf:      conf,
+		MutableState: make(map[string]int),
+		lastLogic:    time.Now(),
 	}
 }
 
-const logicStep = 200_000 * time.Nanosecond
+const logicStep = 20_000 * time.Nanosecond
+
+var generation = 0
+
+func (g *Game) HeadlessRun() {
+	g.newGeneration()
+	for {
+		if generation%100 == 0 {
+			for k, v := range g.MutableState {
+				fmt.Println()
+				fmt.Printf("%s: %d", k, v)
+			}
+		}
+		if len(g.Bots) < g.GenConf.NewGenThreshold {
+			generation++
+			g.newGeneration()
+			g.MutableState["generation"] = generation
+		}
+		g.botsActions()
+		g.lastLogic = g.lastLogic.Add(logicStep)
+	}
+}
 
 func (g *Game) Run() {
 	g.newGeneration()
+
 	for !ui.Window.ShouldClose() {
 		now := time.Now()
 		for now.Sub(g.lastLogic) >= logicStep {
@@ -80,6 +104,7 @@ func (g *Game) populateBoard() {
 
 func (g *Game) newGeneration() {
 	if len(g.Bots) == 0 {
+		generation = 0
 		g.initialBotsGeneration()
 		g.populateBoard()
 		return
