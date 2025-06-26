@@ -14,6 +14,7 @@ type GenerationConfig struct {
 	ResourceChance  int
 	NewGenThreshold int
 	ChildrenByBot   int
+	InitialGenome   *bot.Genome
 }
 
 type Game struct {
@@ -34,24 +35,17 @@ func NewGame(conf GenerationConfig) *Game {
 	}
 }
 
-const logicStep = 20_000 * time.Nanosecond
+const logicStep = 20000 * time.Nanosecond
+
+// const logicStep = 2 * time.Millisecond
 
 var generation = 0
 
 func (g *Game) HeadlessRun() {
 	g.newGeneration()
+
 	for {
-		if generation%100 == 0 {
-			for k, v := range g.MutableState {
-				fmt.Println()
-				fmt.Printf("%s: %d", k, v)
-			}
-		}
-		if len(g.Bots) < g.GenConf.NewGenThreshold {
-			generation++
-			g.newGeneration()
-			g.MutableState["generation"] = generation
-		}
+		g.step()
 		g.botsActions()
 		g.lastLogic = g.lastLogic.Add(logicStep)
 	}
@@ -61,15 +55,31 @@ func (g *Game) Run() {
 	g.newGeneration()
 
 	for !ui.Window.ShouldClose() {
-		now := time.Now()
-		for now.Sub(g.lastLogic) >= logicStep {
-			if len(g.Bots) < g.GenConf.NewGenThreshold {
-				g.newGeneration()
-			}
-			g.botsActions()
-			g.lastLogic = g.lastLogic.Add(logicStep)
-		}
+		g.step()
 		ui.DrawGrid(*g.Board, g.Bots)
+	}
+}
+
+func (g *Game) step() {
+	maxMaxHp := 0
+	for k, v := range g.MutableState {
+		if k != "maxHp" || v <= maxMaxHp {
+			continue
+		}
+		maxMaxHp = v
+		fmt.Println()
+		gen := g.MutableState["generation"]
+		fmt.Printf("Generation: %d; Max HP: %d;", gen, v)
+	}
+	now := time.Now()
+	for now.Sub(g.lastLogic) >= logicStep {
+		if len(g.Bots) < g.GenConf.NewGenThreshold {
+			generation++
+			g.newGeneration()
+			g.MutableState["generation"] = generation
+		}
+		g.botsActions()
+		g.lastLogic = g.lastLogic.Add(logicStep)
 	}
 }
 
@@ -105,7 +115,7 @@ func (g *Game) populateBoard() {
 func (g *Game) newGeneration() {
 	if len(g.Bots) == 0 {
 		generation = 0
-		g.initialBotsGeneration()
+		g.initialBotsGeneration(g.GenConf.InitialGenome)
 		g.populateBoard()
 		return
 	}
@@ -134,7 +144,7 @@ func (g *Game) generateChildren() {
 	g.Bots = children
 }
 
-func (g *Game) initialBotsGeneration() {
+func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 	for r := range board.Rows {
 		for c := range board.Cols {
 			pos := board.Position{X: c, Y: r}
@@ -149,6 +159,9 @@ func (g *Game) initialBotsGeneration() {
 				continue
 			}
 			b := bot.NewBot()
+			if initialGenome != nil {
+				b.Genome = *initialGenome
+			}
 			g.Board.Set(pos, b)
 			g.Bots[pos] = b
 		}
@@ -158,6 +171,11 @@ func (g *Game) initialBotsGeneration() {
 func (g *Game) botsActions() {
 	newBots := make(map[board.Position]bot.Bot)
 	for startPos, b := range g.Bots {
+		if b.Hp > g.MutableState["maxHp"] {
+			g.MutableState["maxHp"] = b.Hp
+			// g.ExportGenome(b)
+		}
+
 		b.Hp -= 1
 		if b.Hp <= 0 {
 			continue
@@ -191,9 +209,7 @@ func (g *Game) botAction(startPos board.Position, b bot.Bot, newBots map[board.P
 		case ptr < 32:
 			b.PointerJump()
 			g.buildStructure(newBots, curPos, b)
-			if cmds > 8 {
-				shouldStop = true
-			}
+			shouldStop = true
 		default:
 			if cmds > 8 {
 				shouldStop = true
@@ -269,7 +285,7 @@ func (g *Game) buildStructure(newBots map[board.Position]bot.Bot, pos board.Posi
 		Hp:    20,
 	})
 	b.Inventory.Amount -= 5
-	b.Hp += 10
+	b.Hp += 1000
 	newBots[pos] = b
 }
 

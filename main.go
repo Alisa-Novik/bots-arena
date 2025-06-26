@@ -1,25 +1,44 @@
 package main
 
 import (
+	"flag"
+	"github.com/go-gl/glfw/v3.3/glfw"
+	"golab/bot"
 	"golab/game"
 	"golab/ui"
+	"golab/util"
 	"runtime"
-
-	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 func init() { runtime.LockOSThread() }
 
 func main() {
-	ui.PrepareUi()
-	defer glfw.Terminate()
+	headless := flag.Bool("h", false, "is headless mode?")
+	useGenome := flag.Bool("i", false, "run with initial genome")
+	flag.Parse()
 
-	conf := game.GenerationConfig{
+	genConf := game.GenerationConfig{
 		BotChance:       5,
 		ResourceChance:  5,
 		NewGenThreshold: 5,
 		ChildrenByBot:   3,
+		InitialGenome:   getInitialGenome(*useGenome),
 	}
-	g := game.NewGame(conf)
-	g.HeadlessRun()
+
+	g := game.NewGame(genConf)
+
+	if *headless {
+		g.HeadlessRun()
+	} else {
+		ui.PrepareUi()
+		defer glfw.Terminate()
+		g.Run()
+	}
+}
+
+func getInitialGenome(enabled bool) *bot.Genome {
+	if !enabled {
+		return nil
+	}
+	return util.ReadGenome()
 }
