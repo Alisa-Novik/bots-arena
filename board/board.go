@@ -12,6 +12,11 @@ type Resource struct {
 	Pos    Position
 	Amount int
 }
+type Controller struct {
+	Pos    Position
+	Owner  *bot.Bot
+	Amount int
+}
 type Building struct {
 	Pos   Position
 	Owner *bot.Bot
@@ -19,6 +24,10 @@ type Building struct {
 }
 type Board struct {
 	grid map[Position]Occupant
+}
+
+func (b *Board) IsGrabable(pos Position) bool {
+	return !b.IsController(pos) && !b.IsResource(pos) && !b.IsBuilding(pos)
 }
 
 func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
@@ -86,6 +95,14 @@ func (b *Board) IsResource(pos Position) bool {
 		return false
 	}
 	_, ok := b.At(pos).(Resource)
+	return ok
+}
+
+func (b *Board) IsController(pos Position) bool {
+	if b.IsEmpty(pos) {
+		return false
+	}
+	_, ok := b.At(pos).(Controller)
 	return ok
 }
 

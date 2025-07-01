@@ -18,11 +18,12 @@ func main() {
 	flag.Parse()
 
 	genConf := game.GenerationConfig{
-		BotChance:       5,
-		ResourceChance:  5,
-		NewGenThreshold: 5,
-		ChildrenByBot:   3,
-		InitialGenome:   getInitialGenome(*useGenome),
+		BotChance:        10,
+		ResourceChance:   1,
+		NewGenThreshold:  3,
+		ControllerAmount: 300,
+		ChildrenByBot:    30,
+		InitialGenome:    getInitialGenome(*useGenome),
 	}
 
 	g := game.NewGame(genConf)

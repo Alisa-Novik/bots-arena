@@ -171,12 +171,12 @@ func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
 			pos := Position{X: c, Y: r}
 
 			if brd.IsBuilding(pos) {
-				drawBuilding(x, y, 0.2, 0.3, 0.2, 1, 1)
+				drawBuilding(x, y, 0.2, 0.9, 0.2, 1, 1)
 				continue
 			}
 
 			if brd.IsResource(pos) {
-				drawCell(x, y, 0.1, 0.2, 0.3, 1, 1)
+				drawCell(x, y, 0.8, 0, 0, 1, 1)
 				continue
 			}
 
@@ -186,7 +186,13 @@ func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
 			}
 
 			if b, ok := bots[pos]; ok {
-				drawBot(x, y, 0.3, 0.3, 1.0, 1, 1, b.Dir, b.Hp)
+				drawBot(x, y, 0, 0, 0.8, 1, 1, b.Dir, b.Hp)
+				continue
+			}
+
+			if brd.IsController(pos) {
+				c := brd.At(pos).(board.Controller)
+				drawController(x, y, 0.9, 0.9, 0.9, 1, 1, c.Amount)
 				continue
 			}
 
@@ -260,6 +266,18 @@ func drawResource(x, y, r, g, b, w, h float32) {
 	gl.Vertex2f(x+ox+w, y+oy+h)
 	gl.Vertex2f(x+ox, y+oy+h)
 	gl.End()
+}
+
+func drawController(x, y, r, g, b, w, h float32, hp int) {
+	gl.Begin(gl.QUADS)
+	gl.Color3f(r, g, b)
+	gl.Vertex2f(x, y)
+	gl.Vertex2f(x+w, y)
+	gl.Vertex2f(x+w, y+h)
+	gl.Vertex2f(x, y+h)
+	gl.End()
+
+	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
 }
 
 func drawBuilding(x, y, r, g, b, w, h float32) {
