@@ -10,7 +10,7 @@ import (
 func ReadGenome() *bot.Genome {
 	data, _ := os.ReadFile("genome")
 	parts := strings.Split(strings.TrimSuffix(string(data), ","), ",")
-	var genome [64]int
+	var genome [128]int
 	for i := range genome {
 		genome[i], _ = strconv.Atoi(parts[i])
 	}

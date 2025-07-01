@@ -27,7 +27,7 @@ type Board struct {
 }
 
 func (b *Board) IsGrabable(pos Position) bool {
-	return !b.IsController(pos) && !b.IsResource(pos) && !b.IsBuilding(pos)
+	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos)
 }
 
 func (b Board) SyncBots(botsMap map[Position]bot.Bot) {

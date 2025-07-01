@@ -6,8 +6,8 @@ import (
 
 type Direction [2]int
 
-const genomeLen = 64
-const genomeMaxValue = 64
+const genomeLen = 128
+const genomeMaxValue = 128
 
 const botHp = 100
 
