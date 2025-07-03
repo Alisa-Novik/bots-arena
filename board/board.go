@@ -26,19 +26,23 @@ type Board struct {
 	grid map[Position]Occupant
 }
 
+func (b *Board) HasController() bool {
+	for r := range Rows {
+		for c := range Cols {
+			pos := NewPosition(r, c)
+			if b.IsController(pos) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (b *Board) IsGrabable(pos Position) bool {
 	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos)
 }
 
 func (b Board) SyncBots(botsMap map[Position]bot.Bot) {
-	for r := range Rows {
-		for c := range Cols {
-			pos := NewPosition(r, c)
-			if b.isBot(pos) {
-				botsMap[pos] = b.At(pos).(bot.Bot)
-			}
-		}
-	}
 }
 
 type Occupant any

@@ -10,54 +10,51 @@ import (
 )
 
 type GenerationConfig struct {
-	BotChance        int
-	ResourceChance   int
-	NewGenThreshold  int
-	ControllerAmount int
-	ChildrenByBot    int
-	InitialGenome    *bot.Genome
+	BotChance       int
+	ResourceChance  int
+	NewGenThreshold int
+	ChildrenByBot   int
+	InitialGenome   *bot.Genome
+
+	ControllerInitialAmount int
+	HpFromController        int
+	InventoryFromController int
+
+	HpFromResource        int
+	InventoryFromResource int
+
+	HpFromBuilding        int
+	InventoryFromBuilding int
+
+	LogicStep time.Duration
 }
 
 type Game struct {
-	Board        *board.Board
-	Bots         map[board.Position]bot.Bot
-	GenConf      GenerationConfig
-	MutableState map[string]int
-	lastLogic    time.Time
+	Board     *board.Board
+	Bots      map[board.Position]bot.Bot
+	GenConf   GenerationConfig
+	lastLogic time.Time
+
+	maxHp   int
+	currGen int
 }
 
 func NewGame(conf GenerationConfig) *Game {
 	return &Game{
-		Board:        board.NewBoard(),
-		Bots:         make(map[board.Position]bot.Bot),
-		GenConf:      conf,
-		MutableState: make(map[string]int),
-		lastLogic:    time.Now(),
+		Board:     board.NewBoard(),
+		Bots:      make(map[board.Position]bot.Bot),
+		GenConf:   conf,
+		lastLogic: time.Now(),
+		maxHp:     0,
+		currGen:   0,
 	}
 }
 
-const logicStep = 100000 * time.Nanosecond
-
-var generation = 0
-
-func (g *Game) HeadlessRun() {
+func (g *Game) RunHeadless() {
 	g.newGeneration()
-	maxMaxHp := 0
 	for {
-		for k, v := range g.MutableState {
-			if k != "maxHp" || v <= maxMaxHp {
-				continue
-			}
-			maxMaxHp = v
-			fmt.Println()
-			gen := g.MutableState["generation"]
-			fmt.Printf("Generation: %d; Max HP: %d;", gen, v)
-		}
 		if len(g.Bots) < g.GenConf.NewGenThreshold {
-			// sometimes not enough bots are generated btw
-			generation++
 			g.newGeneration()
-			g.MutableState["generation"] = generation
 		}
 		g.botsActions()
 	}
@@ -73,46 +70,28 @@ func (g *Game) Run() {
 }
 
 func (g *Game) step() {
-	for time.Since(g.lastLogic) >= logicStep {
-		// g.printDebugInfo()
+	for time.Since(g.lastLogic) >= g.GenConf.LogicStep {
+		g.printDebugInfo()
 		if len(g.Bots) == 0 {
-			generation = 0
 			g.initialBotsGeneration(g.GenConf.InitialGenome)
 			g.populateBoard()
 			return
 		}
 		if len(g.Bots) <= g.GenConf.NewGenThreshold {
-			generation++
-			g.MutableState["generation"] = generation
 			g.newGeneration()
 		}
 		g.botsActions()
-		g.lastLogic = g.lastLogic.Add(logicStep)
+		g.lastLogic = g.lastLogic.Add(g.GenConf.LogicStep)
 	}
 }
 
 func (g *Game) printDebugInfo() {
-	maxMaxHp := 0
-	for k, v := range g.MutableState {
-		if k != "maxHp" || v <= maxMaxHp {
-			continue
-		}
-		maxMaxHp = v
-		gen := g.MutableState["generation"]
-		fmt.Println()
-		fmt.Printf("Generation: %d; Max HP: %d;", gen, v)
-		fmt.Println()
-		fmt.Printf("Bots amount: %d", len(g.Bots))
-		fmt.Println()
-	}
+	fmt.Printf("\nGeneration: %d; Max HP: %d;", g.currGen, g.maxHp)
+	fmt.Printf("\nBots amount: %d", len(g.Bots))
 }
 
-func (g *Game) rollBotGen() bool {
-	return rand.Intn(1000) < g.GenConf.BotChance
-}
-
-func (g *Game) rollResourceGen() bool {
-	return rand.Intn(100) < g.GenConf.ResourceChance
+func (g *Game) rollChance(percent int) bool {
+	return rand.Intn(100) < percent
 }
 
 func (g *Game) populateBoard() {
@@ -139,7 +118,7 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, bot)
 				continue
 			}
-			if g.rollResourceGen() {
+			if g.rollChance(g.GenConf.ResourceChance) {
 				g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
 				continue
 			}
@@ -148,15 +127,17 @@ func (g *Game) populateBoard() {
 }
 
 func (g *Game) newGeneration() {
+	g.currGen += 1
 	g.generateChildren()
 	g.populateBoard()
 }
 
 func (g *Game) generateChildren() {
 	children := make(map[board.Position]bot.Bot)
+	oldBots := g.Bots
 	g.Bots = make(map[board.Position]bot.Bot)
 
-	for _, parent := range g.Bots {
+	for _, parent := range oldBots {
 		for range g.GenConf.ChildrenByBot {
 			var pos board.Position
 			for {
@@ -183,10 +164,7 @@ func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 				g.Board.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
-			if _, ok := g.Bots[pos]; ok {
-				continue
-			}
-			if !g.Board.IsEmpty(pos) || !g.rollBotGen() {
+			if !g.Board.IsEmpty(pos) || !g.rollChance(g.GenConf.BotChance) {
 				continue
 			}
 			b := bot.NewBot()
@@ -203,10 +181,7 @@ func (g *Game) botsActions() {
 	newBots := make(map[board.Position]bot.Bot)
 
 	for startPos, b := range g.Bots {
-		if b.Hp > g.MutableState["maxHp"] {
-			g.MutableState["maxHp"] = b.Hp
-			// util.ExportGenome(b)
-		}
+		g.maxHp = max(b.Hp, g.maxHp)
 
 		b.Hp -= 1
 		if b.Hp <= 0 {
@@ -286,22 +261,24 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 		if v.Owner == &b {
 			return
 		}
-		// b.Inventory.Amount -= 1000
-		// b.Hp -= 1000
-		// g.Board.Set(grabPos, nil)
+		b.Inventory.Amount += g.GenConf.InventoryFromBuilding
+		b.Hp -= g.GenConf.HpFromBuilding
+		g.Board.Set(grabPos, nil)
 	case board.Controller:
-		b.Inventory.Amount += 100
-		v.Amount -= 100
-		if v.Amount == 0 {
+		b.Inventory.Amount += g.GenConf.InventoryFromController
+		// b.Hp += g.GenConf.HpFromController
+		v.Amount -= 1
+		if v.Amount <= 0 {
 			g.Board.Set(grabPos, nil)
 		} else {
 			g.Board.Set(grabPos, v)
 		}
 	case board.Resource:
-		b.Inventory.Amount += 5000
-		b.Hp += 10
+		b.Inventory.Amount += g.GenConf.InventoryFromResource
+		b.Hp += g.GenConf.HpFromResource
+		// Todo:  adjust
 		v.Amount -= 1
-		if v.Amount == 0 {
+		if v.Amount <= 0 {
 			g.Board.Set(grabPos, nil)
 		} else {
 			g.Board.Set(grabPos, v)
@@ -312,40 +289,39 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 	newBots[pos] = b
 }
 
-func (g *Game) buildStructure(pos board.Position, b bot.Bot) bot.Bot {
+func (g *Game) buildStructure(botPos board.Position, b bot.Bot) bot.Bot {
 	if b.Inventory.Amount < 5 {
 		return b
 	}
 
 	ptr := b.Genome.Pointer
+
 	d := board.PosClock[b.Genome.Pointer%8]
 	dx, dy := d[0], d[1]
-	buildPos := board.NewPosition(pos.Y+dy, pos.X+dx)
-	if g.Board.IsWall(buildPos) || !g.Board.IsEmpty(buildPos) {
+	pos := board.NewPosition(botPos.Y+dy, botPos.X+dx)
+	if g.Board.IsWall(pos) || !g.Board.IsEmpty(pos) {
 		return b
-	}
-	if g.Board.IsResource(buildPos) {
-		controller := g.Board.At(buildPos).(board.Controller)
-		controller.Amount -= g.GenConf.ControllerAmount
-		b.Inventory.Amount += g.GenConf.ControllerAmount
 	}
 
 	switch {
 	case ptr < 24:
-		g.Board.Set(buildPos, board.Building{
-			Pos:   buildPos,
+		g.Board.Set(pos, board.Building{
+			Pos:   pos,
 			Owner: &b,
 			Hp:    20,
 		})
 		b.Inventory.Amount -= 1
 		b.Hp += 300
 	case ptr < 32:
-		g.Board.Set(buildPos, board.Controller{
-			Pos:    buildPos,
+		// if g.Board.HasController() {
+		// 	return b
+		// }
+		g.Board.Set(pos, board.Controller{
+			Pos:    pos,
 			Owner:  &b,
-			Amount: g.GenConf.ControllerAmount,
+			Amount: g.GenConf.ControllerInitialAmount,
 		})
-		b.Inventory.Amount = 0
+		b.Hp += g.GenConf.HpFromController
 	}
 
 	return b

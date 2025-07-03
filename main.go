@@ -2,12 +2,14 @@ package main
 
 import (
 	"flag"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"golab/bot"
 	"golab/game"
 	"golab/ui"
 	"golab/util"
 	"runtime"
+	"time"
+
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 func init() { runtime.LockOSThread() }
@@ -18,18 +20,29 @@ func main() {
 	flag.Parse()
 
 	genConf := game.GenerationConfig{
-		BotChance:        10,
-		ResourceChance:   1,
-		NewGenThreshold:  3,
-		ControllerAmount: 300,
-		ChildrenByBot:    30,
-		InitialGenome:    getInitialGenome(*useGenome),
+		BotChance:       1,
+		ResourceChance:  1,
+		NewGenThreshold: 3,
+		ChildrenByBot:   10,
+		InitialGenome:   getInitialGenome(*useGenome),
+
+		ControllerInitialAmount: 10,
+		HpFromController:        10000,
+		InventoryFromController: -100,
+
+		HpFromResource:        300,
+		InventoryFromResource: 1000,
+
+		HpFromBuilding:        300,
+		InventoryFromBuilding: 300,
+
+		LogicStep: 100000 * time.Nanosecond,
 	}
 
 	g := game.NewGame(genConf)
 
 	if *headless {
-		g.HeadlessRun()
+		g.RunHeadless()
 	} else {
 		ui.PrepareUi()
 		defer glfw.Terminate()
