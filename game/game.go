@@ -6,26 +6,26 @@ import (
 	"golab/bot"
 	conf "golab/config"
 	"golab/ui"
-	"math/rand"
+	"golab/util"
 	"time"
 )
 
 type Game struct {
-	Board     *board.Board
-	Bots      map[board.Position]bot.Bot
-	config    *conf.Config
-	lastLogic time.Time
+	Board  *board.Board
+	Bots   map[board.Position]bot.Bot
+	config *conf.Config
+	State  *conf.GameState
 
 	maxHp   int
 	currGen int
 }
 
-func NewGame(conf *conf.Config) *Game {
+func NewGame(config *conf.Config) *Game {
 	return &Game{
-		Board:     board.NewBoard(),
-		Bots:      make(map[board.Position]bot.Bot),
-		config:    conf,
-		lastLogic: time.Now(),
+		Board:  board.NewBoard(),
+		Bots:   make(map[board.Position]bot.Bot),
+		config: config,
+		State:  &conf.GameState{LastLogic: time.Now()},
 
 		maxHp:   0,
 		currGen: 0,
@@ -57,8 +57,8 @@ func (g *Game) Run() {
 }
 
 func (g *Game) step() {
-	for time.Since(g.lastLogic) >= g.config.LogicStep {
-		g.printDebugInfo()
+	for time.Since(g.State.LastLogic) >= g.config.LogicStep {
+		// g.printDebugInfo()
 		if len(g.Bots) == 0 {
 			g.initialBotsGeneration(g.config.InitialGenome)
 			g.populateBoard()
@@ -68,17 +68,13 @@ func (g *Game) step() {
 			g.newGeneration()
 		}
 		g.botsActions()
-		g.lastLogic = g.lastLogic.Add(g.config.LogicStep)
+		g.State.LastLogic = g.State.LastLogic.Add(g.config.LogicStep)
 	}
 }
 
 func (g *Game) printDebugInfo() {
 	fmt.Printf("\nGeneration: %d; Max HP: %d;", g.currGen, g.maxHp)
 	fmt.Printf("\nBots amount: %d", len(g.Bots))
-}
-
-func (g *Game) rollChance(percent int) bool {
-	return rand.Intn(100) < percent
 }
 
 func (g *Game) populateBoard() {
@@ -91,21 +87,23 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
-			if oldBoard.IsController(pos) {
-				c := oldBoard.At(pos).(board.Controller)
-				g.Board.Set(pos, board.Controller{Pos: pos, Owner: nil, Amount: c.Amount})
+			if spawner, ok := oldBoard.At(pos).(board.Spawner); ok {
+				g.Board.Set(pos, spawner)
 				continue
 			}
-			if oldBoard.IsBuilding(pos) {
+			if _, ok := oldBoard.At(pos).(board.Building); ok {
 				g.Board.Set(pos, board.Building{Pos: pos, Owner: nil, Hp: 10})
 				continue
 			}
-			// why? it's populated already
+			if c, ok := oldBoard.At(pos).(board.Controller); ok {
+				g.Board.Set(pos, board.Controller{Pos: pos, Owner: nil, Amount: c.Amount})
+				continue
+			}
 			if bot, hasBot := g.Bots[pos]; hasBot {
 				g.Board.Set(pos, bot)
 				continue
 			}
-			if g.rollChance(g.config.ResourceChance) {
+			if util.RollChance(g.config.ResourceChance) {
 				g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
 				continue
 			}
@@ -151,7 +149,7 @@ func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 				g.Board.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
-			if !g.Board.IsEmpty(pos) || !g.rollChance(g.config.BotChance) {
+			if !g.Board.IsEmpty(pos) || !util.RollChance(g.config.BotChance) {
 				continue
 			}
 			b := bot.NewBot()
@@ -166,7 +164,6 @@ func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 
 func (g *Game) botsActions() {
 	newBots := make(map[board.Position]bot.Bot)
-
 	for startPos, b := range g.Bots {
 		g.maxHp = max(b.Hp, g.maxHp)
 
@@ -251,6 +248,20 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 		b.Inventory.Amount += g.config.InventoryFromBuilding
 		b.Hp -= g.config.HpFromBuilding
 		g.Board.Set(grabPos, nil)
+	case board.Spawner:
+		// if v.Owner != &b {
+		// 	// maybe bot should try to "steal" the spawner?
+		// 	return
+		// }
+		// if b.Inventory.Amount < 1000 {
+		// 	return
+		// }
+		// b.Inventory.Amount -= 1000
+		spawnPos, found := g.Board.FindEmptyPosAround(pos)
+		if !found {
+			return
+		}
+		newBots[spawnPos] = b.NewChild()
 	case board.Controller:
 		b.Inventory.Amount += g.config.InventoryFromController
 		// b.Hp += g.GenConf.HpFromController
@@ -299,10 +310,20 @@ func (g *Game) buildStructure(botPos board.Position, b bot.Bot) bot.Bot {
 		})
 		b.Inventory.Amount -= 1
 		b.Hp += 300
+	case ptr < 30:
+		if b.HasSpawner {
+			return b
+		}
+		g.Board.Set(pos, board.Spawner{
+			Pos:    pos,
+			Owner:  &b,
+			Amount: 10,
+		})
+		b.HasSpawner = true
 	case ptr < 32:
-		// if g.Board.HasController() {
-		// 	return b
-		// }
+		if g.Board.HasController() {
+			return b
+		}
 		g.Board.Set(pos, board.Controller{
 			Pos:    pos,
 			Owner:  &b,
@@ -327,6 +348,10 @@ func (g *Game) lookAround(pos board.Position, b bot.Bot) bot.Bot {
 		b.PointerJumpBy(3)
 	case *board.Resource:
 		b.PointerJumpBy(4)
+	case *board.Controller:
+		b.PointerJumpBy(5)
+	case *board.Spawner:
+		b.PointerJumpBy(6)
 	default:
 		b.PointerJump()
 	}

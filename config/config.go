@@ -2,11 +2,15 @@ package config
 
 import (
 	"golab/bot"
-	"golab/util"
 	"time"
 )
 
+type GameState struct {
+	LastLogic time.Time
+}
+
 type Config struct {
+	MutationRate    int
 	BotChance       int
 	ResourceChance  int
 	NewGenThreshold int
@@ -29,6 +33,7 @@ type Config struct {
 
 func NewConfig(useGenome *bool) Config {
 	return Config{
+		MutationRate:    2,
 		BotChance:       1,
 		ResourceChance:  1,
 		NewGenThreshold: 3,
@@ -45,17 +50,17 @@ func NewConfig(useGenome *bool) Config {
 		HpFromBuilding:        300,
 		InventoryFromBuilding: 300,
 
-		LogicStep: 1000000 * time.Nanosecond,
+		LogicStep: 10000000 * time.Nanosecond,
 		Pause:     false,
 	}
 }
 
 func (c *Config) SlowDown() {
-	c.LogicStep += 10 * time.Millisecond
+	c.LogicStep *= 2
 }
 
 func (c *Config) SpeedUp() {
-	c.LogicStep -= 10 * time.Millisecond
+	c.LogicStep /= 2
 }
 
 func (c *Config) Speed() int {
@@ -66,5 +71,5 @@ func getInitialGenome(enabled bool) *bot.Genome {
 	if !enabled {
 		return nil
 	}
-	return util.ReadGenome()
+	return bot.ReadGenome()
 }

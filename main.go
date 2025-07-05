@@ -21,6 +21,7 @@ func main() {
 	g := game.NewGame(&config)
 
 	ui.SetConfig(&config)
+	ui.SetGameState(g.State)
 
 	if *headless {
 		g.RunHeadless()

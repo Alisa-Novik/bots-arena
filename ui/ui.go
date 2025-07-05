@@ -6,6 +6,7 @@ import (
 	"golab/bot"
 	"golab/config"
 	"os"
+	"time"
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -20,7 +21,9 @@ const (
 )
 
 var Window *glfw.Window
+
 var conf *config.Config
+var gameState *config.GameState
 
 // Camera
 var (
@@ -46,9 +49,19 @@ func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action,
 		conf.SlowDown()
 	case glfw.KeyP:
 		conf.Pause = !conf.Pause
+		if !conf.Pause {
+			gameState.LastLogic = time.Now()
+		}
 	case glfw.KeyEscape:
 		w.SetShouldClose(true)
 	}
+}
+
+func SetGameState(s *config.GameState) {
+	if s == nil {
+		panic("config is nil")
+	}
+	gameState = s
 }
 
 func SetConfig(config *config.Config) {
@@ -230,7 +243,7 @@ func DrawOverlay() {
 	gl.MatrixMode(gl.MODELVIEW)
 }
 
-func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
+func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 	ApplyCamera()
 	for r := range rows {
@@ -246,6 +259,8 @@ func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
 
 			if brd.IsResource(pos) {
 				drawCell(x, y, 0.8, 0, 0, 1, 1)
+				// drawCell(x, y, 0.2, 0.2, 0.2, 1, 1)
+				// drawResource(x, y, 0.8, 0, 0, 1, 1)
 				continue
 			}
 
@@ -254,8 +269,14 @@ func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
 				continue
 			}
 
-			if b, ok := bots[pos]; ok {
-				drawBot(x, y, 0, 0, 0.8, 1, 1, b.Dir, b.Hp)
+			if brd.IsSpawner(pos) {
+				drawBuilding(x, y, 0, 0, 0, 1, 1)
+				continue
+			}
+
+			if bt, ok := bots[pos]; ok {
+				r, g, b := bt.Color[0], bt.Color[1], bt.Color[2]
+				drawBot(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
 				continue
 			}
 
