@@ -12,13 +12,27 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
-func init() { runtime.LockOSThread() }
-
 func main() {
+	runtime.LockOSThread()
+	print("Hello, World!")
 	headless := flag.Bool("h", false, "is headless mode?")
 	useGenome := flag.Bool("i", false, "run with initial genome")
 	flag.Parse()
 
+	genConf := buildBasicConfig(useGenome)
+
+	g := game.NewGame(genConf)
+
+	if *headless {
+		g.RunHeadless()
+	} else {
+		ui.PrepareUi()
+		defer glfw.Terminate()
+		g.Run()
+	}
+}
+
+func buildBasicConfig(useGenome *bool) game.GenerationConfig {
 	genConf := game.GenerationConfig{
 		BotChance:       1,
 		ResourceChance:  1,
@@ -36,18 +50,9 @@ func main() {
 		HpFromBuilding:        300,
 		InventoryFromBuilding: 300,
 
-		LogicStep: 100000 * time.Nanosecond,
+		LogicStep: 1000000 * time.Nanosecond,
 	}
-
-	g := game.NewGame(genConf)
-
-	if *headless {
-		g.RunHeadless()
-	} else {
-		ui.PrepareUi()
-		defer glfw.Terminate()
-		g.Run()
-	}
+	return genConf
 }
 
 func getInitialGenome(enabled bool) *bot.Genome {

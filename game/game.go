@@ -1,11 +1,13 @@
 package game
 
 import (
+	"bufio"
 	"fmt"
 	"golab/board"
 	"golab/bot"
 	"golab/ui"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -37,6 +39,7 @@ type Game struct {
 
 	maxHp   int
 	currGen int
+	pause   bool
 }
 
 func NewGame(conf GenerationConfig) *Game {
@@ -45,8 +48,10 @@ func NewGame(conf GenerationConfig) *Game {
 		Bots:      make(map[board.Position]bot.Bot),
 		GenConf:   conf,
 		lastLogic: time.Now(),
-		maxHp:     0,
-		currGen:   0,
+
+		maxHp:   0,
+		currGen: 0,
+		pause:   false,
 	}
 }
 
@@ -63,7 +68,23 @@ func (g *Game) RunHeadless() {
 func (g *Game) Run() {
 	g.initialBotsGeneration(g.GenConf.InitialGenome)
 	g.populateBoard()
+
+	go func() {
+		for {
+			r, _, _ := bufio.NewReader(os.Stdin).ReadRune()
+			switch r {
+			case 'p':
+				g.pause = !g.pause
+			}
+		}
+	}()
+
 	for !ui.Window.ShouldClose() {
+		if g.pause {
+			ui.DrawGrid(*g.Board, g.Bots)
+			time.Sleep(time.Second)
+			continue
+		}
 		g.step()
 		ui.DrawGrid(*g.Board, g.Bots)
 	}
