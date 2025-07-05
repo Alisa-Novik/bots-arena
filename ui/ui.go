@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golab/board"
 	"golab/bot"
+	"golab/config"
 	"os"
 
 	"github.com/go-gl/gl/v2.1/gl"
@@ -19,6 +20,7 @@ const (
 )
 
 var Window *glfw.Window
+var conf *config.GenerationConfig
 
 // Camera
 var (
@@ -33,7 +35,28 @@ var (
 
 var Font *gltext.Font
 
-var paused bool
+func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
+	if action != glfw.Press {
+		return
+	}
+	switch key {
+	case glfw.KeyK:
+		conf.SlowDown()
+	case glfw.KeyJ:
+		conf.SpeedUp()
+	case glfw.KeyP:
+		conf.Pause = !conf.Pause
+	case glfw.KeyEscape:
+		w.SetShouldClose(true)
+	}
+}
+
+func SetConfig(config *config.GenerationConfig) {
+	if config == nil {
+		panic("config is nil")
+	}
+	conf = config
+}
 
 func PrepareUi() {
 	if err := glfw.Init(); err != nil {
@@ -47,6 +70,7 @@ func PrepareUi() {
 	AppWindow = window
 	window.SetScrollCallback(scrollCallback)
 	window.SetMouseButtonCallback(mouseButtonCallback)
+	window.SetKeyCallback(keyCallback)
 	window.SetCursorPosCallback(cursorPosCallback)
 	if err != nil {
 		panic(err)

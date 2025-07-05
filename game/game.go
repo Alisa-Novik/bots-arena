@@ -1,64 +1,41 @@
 package game
 
 import (
-	"bufio"
 	"fmt"
 	"golab/board"
 	"golab/bot"
+	conf "golab/config"
 	"golab/ui"
 	"math/rand"
-	"os"
 	"time"
 )
-
-type GenerationConfig struct {
-	BotChance       int
-	ResourceChance  int
-	NewGenThreshold int
-	ChildrenByBot   int
-	InitialGenome   *bot.Genome
-
-	ControllerInitialAmount int
-	HpFromController        int
-	InventoryFromController int
-
-	HpFromResource        int
-	InventoryFromResource int
-
-	HpFromBuilding        int
-	InventoryFromBuilding int
-
-	LogicStep time.Duration
-}
 
 type Game struct {
 	Board     *board.Board
 	Bots      map[board.Position]bot.Bot
-	GenConf   GenerationConfig
+	config    *conf.GenerationConfig
 	lastLogic time.Time
 
 	maxHp   int
 	currGen int
-	pause   bool
 }
 
-func NewGame(conf GenerationConfig) *Game {
+func NewGame(conf *conf.GenerationConfig) *Game {
 	return &Game{
 		Board:     board.NewBoard(),
 		Bots:      make(map[board.Position]bot.Bot),
-		GenConf:   conf,
+		config:    conf,
 		lastLogic: time.Now(),
 
 		maxHp:   0,
 		currGen: 0,
-		pause:   false,
 	}
 }
 
 func (g *Game) RunHeadless() {
 	g.newGeneration()
 	for {
-		if len(g.Bots) < g.GenConf.NewGenThreshold {
+		if len(g.Bots) < g.config.NewGenThreshold {
 			g.newGeneration()
 		}
 		g.botsActions()
@@ -66,23 +43,12 @@ func (g *Game) RunHeadless() {
 }
 
 func (g *Game) Run() {
-	g.initialBotsGeneration(g.GenConf.InitialGenome)
+	g.initialBotsGeneration(g.config.InitialGenome)
 	g.populateBoard()
 
-	go func() {
-		for {
-			r, _, _ := bufio.NewReader(os.Stdin).ReadRune()
-			switch r {
-			case 'p':
-				g.pause = !g.pause
-			}
-		}
-	}()
-
 	for !ui.Window.ShouldClose() {
-		if g.pause {
+		if g.config.Pause {
 			ui.DrawGrid(*g.Board, g.Bots)
-			time.Sleep(time.Second)
 			continue
 		}
 		g.step()
@@ -91,18 +57,18 @@ func (g *Game) Run() {
 }
 
 func (g *Game) step() {
-	for time.Since(g.lastLogic) >= g.GenConf.LogicStep {
+	for time.Since(g.lastLogic) >= g.config.LogicStep {
 		g.printDebugInfo()
 		if len(g.Bots) == 0 {
-			g.initialBotsGeneration(g.GenConf.InitialGenome)
+			g.initialBotsGeneration(g.config.InitialGenome)
 			g.populateBoard()
 			return
 		}
-		if len(g.Bots) <= g.GenConf.NewGenThreshold {
+		if len(g.Bots) <= g.config.NewGenThreshold {
 			g.newGeneration()
 		}
 		g.botsActions()
-		g.lastLogic = g.lastLogic.Add(g.GenConf.LogicStep)
+		g.lastLogic = g.lastLogic.Add(g.config.LogicStep)
 	}
 }
 
@@ -139,7 +105,7 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, bot)
 				continue
 			}
-			if g.rollChance(g.GenConf.ResourceChance) {
+			if g.rollChance(g.config.ResourceChance) {
 				g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
 				continue
 			}
@@ -159,7 +125,7 @@ func (g *Game) generateChildren() {
 	g.Bots = make(map[board.Position]bot.Bot)
 
 	for _, parent := range oldBots {
-		for range g.GenConf.ChildrenByBot {
+		for range g.config.ChildrenByBot {
 			var pos board.Position
 			for {
 				pos = board.NewRandomPosition()
@@ -185,7 +151,7 @@ func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 				g.Board.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
-			if !g.Board.IsEmpty(pos) || !g.rollChance(g.GenConf.BotChance) {
+			if !g.Board.IsEmpty(pos) || !g.rollChance(g.config.BotChance) {
 				continue
 			}
 			b := bot.NewBot()
@@ -282,11 +248,11 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 		if v.Owner == &b {
 			return
 		}
-		b.Inventory.Amount += g.GenConf.InventoryFromBuilding
-		b.Hp -= g.GenConf.HpFromBuilding
+		b.Inventory.Amount += g.config.InventoryFromBuilding
+		b.Hp -= g.config.HpFromBuilding
 		g.Board.Set(grabPos, nil)
 	case board.Controller:
-		b.Inventory.Amount += g.GenConf.InventoryFromController
+		b.Inventory.Amount += g.config.InventoryFromController
 		// b.Hp += g.GenConf.HpFromController
 		v.Amount -= 1
 		if v.Amount <= 0 {
@@ -295,8 +261,8 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 			g.Board.Set(grabPos, v)
 		}
 	case board.Resource:
-		b.Inventory.Amount += g.GenConf.InventoryFromResource
-		b.Hp += g.GenConf.HpFromResource
+		b.Inventory.Amount += g.config.InventoryFromResource
+		b.Hp += g.config.HpFromResource
 		// Todo:  adjust
 		v.Amount -= 1
 		if v.Amount <= 0 {
@@ -340,9 +306,9 @@ func (g *Game) buildStructure(botPos board.Position, b bot.Bot) bot.Bot {
 		g.Board.Set(pos, board.Controller{
 			Pos:    pos,
 			Owner:  &b,
-			Amount: g.GenConf.ControllerInitialAmount,
+			Amount: g.config.ControllerInitialAmount,
 		})
-		b.Hp += g.GenConf.HpFromController
+		b.Hp += g.config.HpFromController
 	}
 
 	return b
