@@ -27,13 +27,6 @@ var (
 	Left  = Direction{-1, 0}
 )
 
-var IntToDir = map[int]Direction{
-	0: Up,
-	1: Right,
-	2: Down,
-	3: Left,
-}
-
 var dirs = []Direction{Up, Right, Down, Left}
 
 type Inventory struct {
