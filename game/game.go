@@ -13,14 +13,14 @@ import (
 type Game struct {
 	Board     *board.Board
 	Bots      map[board.Position]bot.Bot
-	config    *conf.GenerationConfig
+	config    *conf.Config
 	lastLogic time.Time
 
 	maxHp   int
 	currGen int
 }
 
-func NewGame(conf *conf.GenerationConfig) *Game {
+func NewGame(conf *conf.Config) *Game {
 	return &Game{
 		Board:     board.NewBoard(),
 		Bots:      make(map[board.Position]bot.Bot),

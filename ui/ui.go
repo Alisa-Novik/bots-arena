@@ -20,7 +20,7 @@ const (
 )
 
 var Window *glfw.Window
-var conf *config.GenerationConfig
+var conf *config.Config
 
 // Camera
 var (
@@ -41,9 +41,9 @@ func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action,
 	}
 	switch key {
 	case glfw.KeyK:
-		conf.SlowDown()
-	case glfw.KeyJ:
 		conf.SpeedUp()
+	case glfw.KeyJ:
+		conf.SlowDown()
 	case glfw.KeyP:
 		conf.Pause = !conf.Pause
 	case glfw.KeyEscape:
@@ -51,7 +51,7 @@ func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action,
 	}
 }
 
-func SetConfig(config *config.GenerationConfig) {
+func SetConfig(config *config.Config) {
 	if config == nil {
 		panic("config is nil")
 	}
@@ -81,8 +81,8 @@ func PrepareUi() {
 		panic(err)
 	}
 
-	gl.Enable(gl.TEXTURE_2D) // lets glyph quads use the atlas
-	gl.Enable(gl.BLEND)      // allow alpha
+	gl.Enable(gl.TEXTURE_2D)
+	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	Font = LoadFont("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf")
 
@@ -150,6 +150,9 @@ func LoadFont(name string) *gltext.Font {
 	if err != nil {
 		panic(err)
 	}
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 	return ft
 }
 
@@ -183,6 +186,48 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 	case glfw.Release:
 		dragging = false
 	}
+}
+
+var overlayW float32 = 230 // pixels
+var overlayH float32 = 90  // pixels
+
+func DrawOverlay() {
+	winW, winH := AppWindow.GetSize()
+
+	gl.MatrixMode(gl.PROJECTION)
+	gl.PushMatrix()
+	gl.LoadIdentity()
+	gl.Ortho(0, float64(winW), 0, float64(winH), -1, 1)
+
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.PushMatrix()
+	gl.LoadIdentity()
+
+	gl.Disable(gl.TEXTURE_2D)
+	gl.Enable(gl.BLEND)
+	gl.Color4f(0.05, 0.05, 0.05, 0.8)
+	gl.Begin(gl.QUADS)
+	gl.Vertex2f(10, float32(winH)-10)
+	gl.Vertex2f(230+overlayW, float32(winH)-10)
+	gl.Vertex2f(230+overlayW, float32(winH)-100-overlayH)
+	gl.Vertex2f(10, float32(winH)-100-overlayH)
+	gl.End()
+
+	gl.Enable(gl.TEXTURE_2D)
+	gl.Color4f(1, 1, 1, 1)
+
+	state := "Running"
+	if conf.Pause {
+		state = "Paused"
+	}
+	Font.Printf(20, 20, "State: %s", state)
+	Font.Printf(20, 55, "J/K speed   P pause")
+	Font.Printf(20, 100, "Speed: %d", conf.Speed())
+
+	gl.PopMatrix()
+	gl.MatrixMode(gl.PROJECTION)
+	gl.PopMatrix()
+	gl.MatrixMode(gl.MODELVIEW)
 }
 
 func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
@@ -224,6 +269,7 @@ func DrawGrid(brd board.Board, bots map[Position]bot.Bot) {
 			drawCell(x, y, 0.2, 0.2, 0.2, 1, 1)
 		}
 	}
+	DrawOverlay()
 	Window.SwapBuffers()
 	glfw.PollEvents()
 }
