@@ -5,6 +5,7 @@ import (
 	"golab/board"
 	"golab/bot"
 	"golab/config"
+	"image"
 	"os"
 	"time"
 
@@ -22,6 +23,14 @@ const (
 
 var Window *glfw.Window
 
+var BotTexture uint32
+var ChestTexture uint32
+var SpawnerTexture uint32
+var WallTexture uint32
+var AppleTexture uint32
+var FarmTexture uint32
+var OreTexture uint32
+
 var conf *config.Config
 var gameState *config.GameState
 
@@ -36,6 +45,7 @@ var (
 	AppWindow              *glfw.Window
 )
 
+var drawShark = true
 var Font *gltext.Font
 
 func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
@@ -97,7 +107,17 @@ func PrepareUi() {
 	gl.Enable(gl.TEXTURE_2D)
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 	Font = LoadFont("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf")
+
+	// load textures
+	BotTexture = loadTexture("/home/alice/projects/golab/bot.jpg")
+	ChestTexture = loadTexture("/home/alice/projects/golab/chest.png")
+	WallTexture = loadTexture("/home/alice/projects/golab/wall.png")
+	SpawnerTexture = loadTexture("/home/alice/projects/golab/spawner.png")
+	AppleTexture = loadTexture("/home/alice/projects/golab/apple.png")
+	FarmTexture = loadTexture("/home/alice/projects/golab/farm.png")
+	OreTexture = loadTexture("/home/alice/projects/golab/ore.png")
 
 	gl.MatrixMode(gl.PROJECTION)
 	gl.LoadIdentity()
@@ -118,6 +138,49 @@ func scrollCallback(_ *glfw.Window, _ float64, yoff float64) {
 	if camScale > 4.0 {
 		camScale = 4.0
 	}
+}
+
+func loadTexture(filename string) uint32 {
+	file, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		panic(err)
+	}
+
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+
+	// длина = 0; capacity = нужный объём
+	data := make([]uint8, 0, w*h*4)
+
+	// снизу-вверх (OpenGL-образный порядок)
+	for y := bounds.Max.Y - 1; y >= bounds.Min.Y; y-- {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			data = append(data, uint8(r>>8), uint8(g>>8), uint8(b>>8), uint8(a>>8))
+		}
+	}
+
+	var tex uint32
+	gl.GenTextures(1, &tex)
+	gl.BindTexture(gl.TEXTURE_2D, tex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
+
+	gl.TexImage2D(
+		gl.TEXTURE_2D, 0, gl.RGBA,
+		int32(w), int32(h), 0,
+		gl.RGBA, gl.UNSIGNED_BYTE,
+		gl.Ptr(data),
+	)
+	return tex
 }
 
 func textAtWorld(wx, wy float32, s string) {
@@ -144,6 +207,7 @@ func textAtWorld(wx, wy float32, s string) {
 	gl.LoadIdentity()
 
 	gl.Color3f(1, 1, 1)
+	gl.Color4f(0, 0, 0, 1)
 	Font.Printf(px, py, s)
 
 	gl.PopMatrix() // MODELVIEW
@@ -204,7 +268,7 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 var overlayW float32 = 230 // pixels
 var overlayH float32 = 90  // pixels
 
-func DrawOverlay() {
+func drawFloatingPane(offsetX float32, renderText func()) {
 	winW, winH := AppWindow.GetSize()
 
 	gl.MatrixMode(gl.PROJECTION)
@@ -220,27 +284,16 @@ func DrawOverlay() {
 	gl.Enable(gl.BLEND)
 	gl.Color4f(0.05, 0.05, 0.05, 0.8)
 	gl.Begin(gl.QUADS)
-	gl.Vertex2f(10, float32(winH)-10)
-	gl.Vertex2f(230+overlayW, float32(winH)-10)
-	gl.Vertex2f(230+overlayW, float32(winH)-100-overlayH)
-	gl.Vertex2f(10, float32(winH)-100-overlayH)
+	gl.Vertex2f(offsetX+10, float32(winH)-10)
+	gl.Vertex2f(offsetX+230+overlayW, float32(winH)-10)
+	gl.Vertex2f(offsetX+230+overlayW, float32(winH)-100-overlayH)
+	gl.Vertex2f(offsetX+10, float32(winH)-100-overlayH)
 	gl.End()
 
 	gl.Enable(gl.TEXTURE_2D)
 	gl.Color4f(1, 1, 1, 1)
 
-	state := "Running"
-	if conf.Pause {
-		state = "Paused"
-	}
-	Font.Printf(20, 20, "State: %s", state)
-	Font.Printf(20, 55, "J/K speed   P pause")
-	Font.Printf(20, 100, "Speed: %d", conf.Speed())
-
-	gl.PopMatrix()
-	gl.MatrixMode(gl.PROJECTION)
-	gl.PopMatrix()
-	gl.MatrixMode(gl.MODELVIEW)
+	renderText()
 }
 
 func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
@@ -250,52 +303,98 @@ func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
 		for c := range cols {
 			x := float32(c)
 			y := float32(r)
-			pos := Position{X: c, Y: r}
+			pos := Position{C: c, R: r}
 
+			// todo: make color part of occupant
 			if brd.IsBuilding(pos) {
-				drawBuilding(x, y, 0.2, 0.9, 0.2, 1, 1)
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, WallTexture)
 				continue
 			}
 
 			if brd.IsResource(pos) {
-				drawCell(x, y, 0.8, 0, 0, 1, 1)
-				// drawCell(x, y, 0.2, 0.2, 0.2, 1, 1)
-				// drawResource(x, y, 0.8, 0, 0, 1, 1)
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, OreTexture)
 				continue
 			}
 
 			if brd.IsWall(pos) {
-				drawCell(x, y, 0.7, 0.7, 0.7, 1, 1)
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, WallTexture)
 				continue
 			}
 
 			if brd.IsSpawner(pos) {
-				drawBuilding(x, y, 0, 0, 0, 1, 1)
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, SpawnerTexture)
 				continue
 			}
 
+			if _, ok := brd.At(pos).(board.Food); ok {
+				drawTexture(x, y, 1, 1, 1, 1, 1, AppleTexture)
+				continue
+			}
+
+			const textX float32 = -0.15
+			const textY float32 = 0.5
+
 			if bt, ok := bots[pos]; ok {
 				r, g, b := bt.Color[0], bt.Color[1], bt.Color[2]
-				drawBot(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
+				if !drawShark {
+					drawBotSimple(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
+					textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", bt.Hp))
+				} else {
+					drawBot(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
+				}
+				continue
+			}
+
+			if f, ok := brd.At(pos).(board.Farm); ok {
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, FarmTexture)
+				textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", f.Amount))
 				continue
 			}
 
 			if brd.IsController(pos) {
 				c := brd.At(pos).(board.Controller)
-				drawController(x, y, 0.9, 0.9, 0.9, 1, 1, c.Amount)
+				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, ChestTexture)
+				textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", c.Amount))
 				continue
 			}
 
 			// empty space
-			drawCell(x, y, 0.2, 0.2, 0.2, 1, 1)
+			drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
 		}
 	}
-	DrawOverlay()
+
+	drawOverlay()
+
 	Window.SwapBuffers()
 	glfw.PollEvents()
 }
 
-func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
+func drawOverlay() {
+	drawFloatingPane(0, func() {
+		state := "Running"
+		if conf.Pause {
+			state = "Paused"
+		}
+		Font.Printf(20, 20, "State: %s", state)
+		Font.Printf(20, 55, "J/K speed   P pause")
+		Font.Printf(20, 100, "Speed: %d", conf.Speed())
+		textClearfix()
+	})
+
+	drawFloatingPane(500, func() {
+		Font.Printf(520, 20, "Test")
+		textClearfix()
+	})
+}
+
+func textClearfix() {
+	gl.PopMatrix()
+	gl.MatrixMode(gl.PROJECTION)
+	gl.PopMatrix()
+	gl.MatrixMode(gl.MODELVIEW)
+}
+
+func drawBotSimple(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.PushMatrix()
 
@@ -340,48 +439,74 @@ func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
 	gl.End()
 
 	gl.PopMatrix()
-
-	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
 }
 
-func drawResource(x, y, r, g, b, w, h float32) {
-	w *= 0.5
-	h *= 0.5
-	ox := w * 0.5
-	oy := h * 0.5
+func drawTexture(x, y, r, g, b, w, h float32, texture uint32) {
+	drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.PushMatrix()
+	gl.Translatef(x, y, 0)
+
+	gl.BindTexture(gl.TEXTURE_2D, texture)
+	gl.Enable(gl.TEXTURE_2D)
+
+	// 1) текстуру не тонируем
+	gl.Color4f(1, 1, 1, 1)
+
+	// 2) вместо MODULATE используем REPLACE
+	gl.TexEnvi(gl.TEXTURE_ENV, gl.TEXTURE_ENV_MODE, gl.REPLACE)
 
 	gl.Begin(gl.QUADS)
-	gl.Color3f(r, g, b)
-	gl.Vertex2f(x+ox, y+oy)
-	gl.Vertex2f(x+ox+w, y+oy)
-	gl.Vertex2f(x+ox+w, y+oy+h)
-	gl.Vertex2f(x+ox, y+oy+h)
+	gl.TexCoord2f(0, 0)
+	gl.Vertex2f(0, 0)
+	gl.TexCoord2f(1, 0)
+	gl.Vertex2f(w, 0)
+	gl.TexCoord2f(1, 1)
+	gl.Vertex2f(w, h)
+	gl.TexCoord2f(0, 1)
+	gl.Vertex2f(0, h)
 	gl.End()
+
+	gl.Disable(gl.TEXTURE_2D)
+	gl.PopMatrix()
 }
 
-func drawController(x, y, r, g, b, w, h float32, hp int) {
+func drawBot(x, y, r, g, b, w, h float32, dir bot.Direction, hp int) {
+	drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.PushMatrix()
+
+	gl.Translatef(x+w/2, y+h/2, 0)
+	switch dir {
+	case bot.Right:
+		gl.Rotatef(270, 0, 0, 1)
+	case bot.Left:
+		gl.Rotatef(90, 0, 0, 1)
+	case bot.Down:
+		gl.Rotatef(180, 0, 0, 1)
+	}
+	gl.Translatef(-w/2, -h/2, 0)
+
+	gl.BindTexture(gl.TEXTURE_2D, BotTexture)
+	gl.Enable(gl.TEXTURE_2D)
+
+	gl.Color4f(1, 1, 1, 1)
 	gl.Begin(gl.QUADS)
-	gl.Color3f(r, g, b)
-	gl.Vertex2f(x, y)
-	gl.Vertex2f(x+w, y)
-	gl.Vertex2f(x+w, y+h)
-	gl.Vertex2f(x, y+h)
+	gl.TexCoord2f(0, 0)
+	gl.Vertex2f(0, 0)
+	gl.TexCoord2f(1, 0)
+	gl.Vertex2f(w, 0)
+	gl.TexCoord2f(1, 1)
+	gl.Vertex2f(w, h)
+	gl.TexCoord2f(0, 1)
+	gl.Vertex2f(0, h)
 	gl.End()
 
-	textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", hp))
+	gl.Disable(gl.TEXTURE_2D)
+	gl.PopMatrix()
 }
 
-func drawBuilding(x, y, r, g, b, w, h float32) {
-	gl.Begin(gl.QUADS)
-	gl.Color3f(r, g, b)
-	gl.Vertex2f(x, y)
-	gl.Vertex2f(x+w, y)
-	gl.Vertex2f(x+w, y+h)
-	gl.Vertex2f(x, y+h)
-	gl.End()
-}
-
-func drawCell(x, y, r, g, b, w, h float32) {
+func drawQuad(x, y, r, g, b, w, h float32) {
 	gl.Begin(gl.QUADS)
 	gl.Color3f(r, g, b)
 	gl.Vertex2f(x, y)

@@ -10,6 +10,7 @@ type GameState struct {
 }
 
 type Config struct {
+	HpThreshold     int
 	MutationRate    int
 	BotChance       int
 	ResourceChance  int
@@ -18,14 +19,22 @@ type Config struct {
 	InitialGenome   *bot.Genome
 
 	ControllerInitialAmount int
-	HpFromController        int
-	InventoryFromController int
+	ControllerHpGain        int
+	ControllerGain          int
 
-	HpFromResource        int
-	InventoryFromResource int
+	SpawnerGrabCost int
 
-	HpFromBuilding        int
-	InventoryFromBuilding int
+	ResourceGrabHpGain int
+	ResourceGrabGain   int
+
+	BuildingGrabHpGain int
+	BuildingGrabCost   int
+	BuildingBuildCost  int
+
+	FoodGrabHpGain int
+	FarmGrabGain   int
+	FarmGrabHpGain int
+	FarmBuildCost  int
 
 	LogicStep time.Duration
 	Pause     bool
@@ -33,24 +42,33 @@ type Config struct {
 
 func NewConfig(useGenome *bool) Config {
 	return Config{
+		HpThreshold:     90,
 		MutationRate:    2,
 		BotChance:       1,
-		ResourceChance:  1,
+		ResourceChance:  20,
 		NewGenThreshold: 3,
 		ChildrenByBot:   10,
 		InitialGenome:   getInitialGenome(*useGenome),
 
 		ControllerInitialAmount: 10,
-		HpFromController:        10000,
-		InventoryFromController: -100,
+		ControllerHpGain:        0,
+		ControllerGain:          -100,
 
-		HpFromResource:        300,
-		InventoryFromResource: 1000,
+		SpawnerGrabCost: 100,
 
-		HpFromBuilding:        300,
-		InventoryFromBuilding: 300,
+		ResourceGrabHpGain: 1,
+		ResourceGrabGain:   10,
 
-		LogicStep: 10000000 * time.Nanosecond,
+		BuildingGrabHpGain: 0,
+		BuildingGrabCost:   4,
+		BuildingBuildCost:  10,
+
+		FoodGrabHpGain: 200,
+		FarmGrabGain:   -1,
+		FarmGrabHpGain: -10,
+		FarmBuildCost:  -10,
+
+		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,
 	}
 }

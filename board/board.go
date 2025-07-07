@@ -2,15 +2,23 @@ package board
 
 import (
 	"golab/bot"
+
 	"golang.org/x/exp/rand"
 )
 
 type Occupant any
-type Position struct{ X, Y int }
-
+type Position struct{ R, C int }
 type Wall struct{ Pos Position }
 
 type Resource struct {
+	Pos    Position
+	Amount int
+}
+type Food struct {
+	Pos    Position
+	Amount int
+}
+type Farm struct {
 	Pos    Position
 	Amount int
 }
@@ -31,6 +39,66 @@ type Building struct {
 }
 type Board struct {
 	grid map[Position]Occupant
+}
+
+var PathToPt = make(map[[2]int][]Position)
+
+// TODO: remove foodFarm check
+func (b *Board) IsFoodFarm(pos Position) bool {
+	if b.IsEmpty(pos) {
+		return false
+	}
+	switch b.At(pos).(type) {
+	case Farm, Food:
+		return true
+	}
+
+	return false
+}
+
+func (b *Board) FindPath(start, end Position) []Position {
+	if start == end {
+		return nil
+	}
+
+	type Node struct {
+		Pos  Position
+		Prev *Node
+	}
+
+	visited := make(map[Position]bool)
+	queue := []Node{{Pos: start}}
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		if curr.Pos == end {
+			var path []Position
+			for n := &curr; n != nil; n = n.Prev {
+				path = append([]Position{n.Pos}, path...)
+			}
+			return path[1:]
+		}
+
+		if visited[curr.Pos] {
+			continue
+		}
+		visited[curr.Pos] = true
+
+		for _, dir := range PosClock {
+			next := curr.Pos.Add(dir[0], dir[1])
+			if !b.IsEmpty(next) || visited[next] {
+				continue
+			}
+			queue = append(queue, Node{Pos: next, Prev: &curr})
+		}
+	}
+	return nil
+}
+
+func (b *Board) Clear(pos Position) {
+	delete(b.grid, pos)
 }
 
 func (b *Board) FindEmptyPosAround(center Position) (Position, bool) {
@@ -56,10 +124,16 @@ func (b *Board) HasController() bool {
 }
 
 func (b *Board) IsGrabable(pos Position) bool {
+	o := b.At(pos)
+	switch o.(type) {
+	case Farm, Food:
+		return true
+	}
+
 	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos) || b.IsSpawner(pos)
 }
 
-const scaleFactor = 2
+const scaleFactor = 1
 const (
 	Rows = 40 * scaleFactor
 	Cols = 60 * scaleFactor
@@ -72,15 +146,19 @@ var PosClock = [8][2]int{
 }
 
 func NewRandomPosition() Position {
-	return Position{X: rand.Intn(Cols), Y: rand.Intn(Rows)}
+	return Position{C: rand.Intn(Cols), R: rand.Intn(Rows)}
 }
 
 func NewPosition(r, c int) Position {
-	return Position{X: c, Y: r}
+	return Position{C: c, R: r}
+}
+
+func (p Position) AddPos(other Position) Position {
+	return Position{C: p.C + other.C, R: p.R + other.R}
 }
 
 func (p Position) Add(r int, c int) Position {
-	return Position{X: p.X + c, Y: p.Y + r}
+	return Position{C: p.C + c, R: p.R + r}
 }
 
 func NewBoard() *Board {
@@ -107,7 +185,7 @@ func (b *Board) At(pos Position) Occupant {
 }
 
 func (b *Board) IsWall(pos Position) bool {
-	return pos.X == 0 || pos.Y == 0 || pos.X == Cols-1 || pos.Y == Rows-1
+	return pos.C == 0 || pos.R == 0 || pos.C == Cols-1 || pos.R == Rows-1
 }
 
 func (b *Board) IsResource(pos Position) bool {

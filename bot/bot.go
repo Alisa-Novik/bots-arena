@@ -13,7 +13,7 @@ type Direction [2]int
 const genomeLen = 128
 const genomeMaxValue = 128
 const mutationRate = 2
-const botHp = 100
+const botHp = 1000
 
 type Genome struct {
 	Matrix  [genomeLen]int
@@ -40,6 +40,9 @@ type Bot struct {
 	Hp         int
 	Color      [3]float32
 	HasSpawner bool
+
+	Unloading bool
+	Usp       [2]int // unloading starting pos
 }
 
 func (b *Bot) PointerJumpBy(toAdd int) {
@@ -55,6 +58,7 @@ func (b *Bot) PointerJump() {
 	toAdd := b.Genome.Matrix[ptr]
 	nextPtr := ptr + toAdd
 	nextPtr %= genomeLen
+	// fmt.Printf("toAdd %d, nextPtr %d, nextPtr2 %d\n", toAdd, ptr+toAdd, nextPtr)
 
 	b.Genome.Pointer = nextPtr
 }
@@ -67,6 +71,8 @@ func NewBot() Bot {
 		Hp:         botHp,
 		Color:      blueColor(),
 		HasSpawner: false,
+		Unloading:  false,
+		Usp:        [2]int{0, 0},
 	}
 }
 
@@ -86,6 +92,8 @@ func (parent *Bot) NewChild() Bot {
 		Hp:         botHp,
 		Color:      mutatedColor(parent.Color, doMutation),
 		HasSpawner: false,
+		Unloading:  false,
+		Usp:        [2]int{0, 0},
 	}
 }
 
@@ -112,7 +120,7 @@ func NewMutatedGenome(genome Genome, doMutation bool) Genome {
 	if !doMutation {
 		return genome
 	}
-	for _ = range mutationRate {
+	for range mutationRate {
 		mutationIdx := rand.Intn(genomeLen)
 		for i := range genome.Matrix {
 			if i == mutationIdx {
