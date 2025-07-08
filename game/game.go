@@ -237,7 +237,6 @@ func (g *Game) move(next map[board.Position]bot.Bot, pos board.Position, dir boa
 
 	blocked := g.Board.IsWall(target) ||
 		!g.Board.IsEmpty(target) ||
-		g.Board.IsFoodFarm(target) ||
 		next[target] != (bot.Bot{})
 
 	if blocked {
@@ -249,12 +248,11 @@ func (g *Game) move(next map[board.Position]bot.Bot, pos board.Position, dir boa
 	next[target] = b
 }
 
-func (g *Game) botAction(start board.Position, b bot.Bot, newBots map[board.Position]bot.Bot) {
-	pos := start
+func (g *Game) botAction(startPos board.Position, b bot.Bot, newBots map[board.Position]bot.Bot) {
+	pos := startPos
 
 	for steps := 0; ; steps++ {
 		ptr := b.Genome.Pointer
-
 		switch {
 		case ptr < 8:
 			b.PointerJump()
@@ -277,6 +275,13 @@ func (g *Game) botAction(start board.Position, b bot.Bot, newBots map[board.Posi
 			if steps >= 8 {
 				return
 			}
+		// case ptr < 64:
+		// 	b.PointerJump()
+		// 	b = g.specialAction(pos, b)
+		// 	newBots[pos] = b
+		// 	if steps >= 8 {
+		// 		return
+		// 	}
 		default:
 			if steps >= 8 {
 				newBots[pos] = b
@@ -289,14 +294,21 @@ func (g *Game) botAction(start board.Position, b bot.Bot, newBots map[board.Posi
 	}
 }
 
+func (g *Game) specialAction(pos board.Position, b bot.Bot) bot.Bot {
+	// ptr range 48 - 64
+	// higher level actions like "unload to nearest chest"
+
+	return b
+}
+
 func (g *Game) tryMove(newBots map[board.Position]bot.Bot, oldPos board.Position, b bot.Bot) board.Position {
-	b.Dir = bot.RandomDir()
+	ptr := b.Genome.Pointer
+	dir := board.PosClock[ptr%8]
+	b.Dir = dir
 	newPos := oldPos.Add(b.Dir[0], b.Dir[1])
 
-	// TODO: remove foodFarm check
 	blocked := g.Board.IsWall(newPos) ||
 		!g.Board.IsEmpty(newPos) ||
-		g.Board.IsFoodFarm(newPos) ||
 		newBots[newPos] != (bot.Bot{}) ||
 		(g.Bots[newPos] != (bot.Bot{}) && newPos != oldPos)
 
@@ -317,7 +329,6 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 	b.PointerJumpBy(b.Genome.Pointer % 8)
 	dx, dy := d[0], d[1]
 	grabPos := board.NewPosition(pos.R+dy, pos.C+dx)
-	// fmt.Printf("grabbing %d pos %d %d ptr %d\n", b.Hp, grabPos.X, grabPos.Y, b.Genome.Pointer)
 
 	if !brd.IsGrabable(grabPos) {
 		newBots[pos] = b
@@ -381,7 +392,6 @@ func (g *Game) grab(newBots map[board.Position]bot.Bot, pos board.Position, b bo
 }
 
 func (g *Game) build(botPos board.Position, b bot.Bot) bot.Bot {
-	// fmt.Printf("building %d\n", b.Hp)
 	c := g.config
 
 	ptr := b.Genome.Pointer
@@ -438,27 +448,28 @@ func (g *Game) build(botPos board.Position, b bot.Bot) bot.Bot {
 }
 
 func (g *Game) lookAround(pos board.Position, b bot.Bot) bot.Bot {
-	// fmt.Printf("looking around %d\n", b.Hp)
 	d := board.PosClock[b.Genome.Pointer%8]
 	dx, dy := d[0], d[1]
 	lookupPos := board.NewPosition(pos.R+dy, pos.C+dx)
+
 	switch g.Board.At(lookupPos).(type) {
-	case *bot.Bot:
+	case bot.Bot:
 		b.PointerJumpBy(1)
-	case *board.Building:
+	case board.Building:
 		b.PointerJumpBy(2)
-	case *board.Wall:
+	case board.Wall:
 		b.PointerJumpBy(3)
-	case *board.Resource:
+	case board.Resource:
 		b.PointerJumpBy(4)
-	case *board.Controller:
+	case board.Controller:
 		b.PointerJumpBy(5)
-	case *board.Spawner:
+	case board.Spawner:
 		b.PointerJumpBy(6)
-	case *board.Farm:
+	case board.Farm:
 		b.PointerJumpBy(7)
-	case *board.Food:
-		b.PointerJumpBy(4)
+	case board.Food:
+		g.Board.Set(lookupPos, nil)
+		b.PointerJumpBy(8)
 	default:
 		b.PointerJump()
 	}

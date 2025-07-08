@@ -43,19 +43,6 @@ type Board struct {
 
 var PathToPt = make(map[[2]int][]Position)
 
-// TODO: remove foodFarm check
-func (b *Board) IsFoodFarm(pos Position) bool {
-	if b.IsEmpty(pos) {
-		return false
-	}
-	switch b.At(pos).(type) {
-	case Farm, Food:
-		return true
-	}
-
-	return false
-}
-
 func (b *Board) FindPath(start, end Position) []Position {
 	if start == end {
 		return nil

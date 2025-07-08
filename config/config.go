@@ -44,10 +44,10 @@ func NewConfig(useGenome *bool) Config {
 	return Config{
 		HpThreshold:     90,
 		MutationRate:    2,
-		BotChance:       1,
-		ResourceChance:  20,
-		NewGenThreshold: 3,
-		ChildrenByBot:   10,
+		BotChance:       3,
+		ResourceChance:  5,
+		NewGenThreshold: 5,
+		ChildrenByBot:   5,
 		InitialGenome:   getInitialGenome(*useGenome),
 
 		ControllerInitialAmount: 10,
@@ -63,10 +63,10 @@ func NewConfig(useGenome *bool) Config {
 		BuildingGrabCost:   4,
 		BuildingBuildCost:  10,
 
-		FoodGrabHpGain: 200,
+		FoodGrabHpGain: 100,
 		FarmGrabGain:   -1,
 		FarmGrabHpGain: -10,
-		FarmBuildCost:  -10,
+		FarmBuildCost:  10,
 
 		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,
