@@ -2,7 +2,7 @@ package board
 
 import (
 	"golab/bot"
-
+	"golab/util"
 	"golang.org/x/exp/rand"
 )
 
@@ -88,10 +88,14 @@ func (b *Board) Clear(pos Position) {
 	delete(b.grid, pos)
 }
 
+func inside(p Position) bool {
+	return p.R >= 0 && p.C >= 0 && p.R < Rows && p.C < Cols
+}
+
 func (b *Board) FindEmptyPosAround(center Position) (Position, bool) {
-	for _, pair := range PosClock {
-		pos := center.Add(pair[0], pair[1])
-		if b.IsEmpty(pos) {
+	for _, d := range PosClock {
+		pos := center.Add(d[0], d[1])
+		if inside(pos) && b.IsEmpty(pos) {
 			return pos, true
 		}
 	}
@@ -126,11 +130,7 @@ const (
 	Cols = 60 * scaleFactor
 )
 
-var PosClock = [8][2]int{
-	// x, y clockwise
-	{0, 1}, {1, 1}, {1, 0}, {1, -1},
-	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
-}
+var PosClock = util.PosClock
 
 func NewRandomPosition() Position {
 	return Position{C: rand.Intn(Cols), R: rand.Intn(Rows)}
@@ -155,6 +155,9 @@ func NewBoard() *Board {
 }
 
 func (b *Board) Set(pos Position, o Occupant) {
+	if !inside(pos) {
+		return
+	}
 	if o == nil {
 		delete(b.grid, pos)
 		return
@@ -163,6 +166,9 @@ func (b *Board) Set(pos Position, o Occupant) {
 }
 
 func (b *Board) IsEmpty(pos Position) bool {
+	if !inside(pos) {
+		return false
+	}
 	_, ok := b.grid[pos]
 	return !ok
 }
@@ -172,6 +178,9 @@ func (b *Board) At(pos Position) Occupant {
 }
 
 func (b *Board) IsWall(pos Position) bool {
+	if !inside(pos) {
+		return true
+	}
 	return pos.C == 0 || pos.R == 0 || pos.C == Cols-1 || pos.R == Rows-1
 }
 

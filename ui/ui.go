@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"golab/board"
 	"golab/bot"
 	"golab/config"
@@ -206,8 +205,8 @@ func textAtWorld(wx, wy float32, s string) {
 	gl.PushMatrix()
 	gl.LoadIdentity()
 
-	gl.Color3f(1, 1, 1)
-	gl.Color4f(0, 0, 0, 1)
+	gl.Color3f(1, 0, 0)
+	// gl.Color4f(0, 0, 0, 1)
 	Font.Printf(px, py, s)
 
 	gl.PopMatrix() // MODELVIEW
@@ -296,7 +295,7 @@ func drawFloatingPane(offsetX float32, renderText func()) {
 	renderText()
 }
 
-func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
+func DrawGrid(brd board.Board, bots map[board.Position]*bot.Bot) {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 	ApplyCamera()
 	for r := range rows {
@@ -318,6 +317,7 @@ func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
 
 			if brd.IsWall(pos) {
 				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, WallTexture)
+				// textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%v;%v", r, c))
 				continue
 			}
 
@@ -335,26 +335,30 @@ func DrawGrid(brd board.Board, bots map[board.Position]bot.Bot) {
 			const textY float32 = 0.5
 
 			if bt, ok := bots[pos]; ok {
+				// row := r
 				r, g, b := bt.Color[0], bt.Color[1], bt.Color[2]
+				drawShark := false
 				if !drawShark {
 					drawBotSimple(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
-					textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", bt.Hp))
+					// textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", bt.Hp))
 				} else {
 					drawBot(x, y, r, g, b, 1, 1, bt.Dir, bt.Hp)
+					// textAtWorld(x-0.25, y+0.15, fmt.Sprintf("%v;%v", row, c))
+					// textAtWorld(x+0.05, y+0.05, fmt.Sprintf("%d", bt.Hp))
 				}
 				continue
 			}
 
-			if f, ok := brd.At(pos).(board.Farm); ok {
+			if _, ok := brd.At(pos).(board.Farm); ok {
 				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, FarmTexture)
-				textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", f.Amount))
+				// textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", f.Amount))
 				continue
 			}
 
 			if brd.IsController(pos) {
-				c := brd.At(pos).(board.Controller)
+				// c := brd.At(pos).(board.Controller)
 				drawTexture(x, y, 0.9, 0.9, 0.9, 1, 1, ChestTexture)
-				textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", c.Amount))
+				// textAtWorld(x+textX, y+textY, fmt.Sprintf("%d", c.Amount))
 				continue
 			}
 
@@ -383,6 +387,9 @@ func drawOverlay() {
 
 	drawFloatingPane(500, func() {
 		Font.Printf(520, 20, "Test")
+		// Font.Printf(fmt.Sprintf("\nGeneration: %d; Max HP: %d;", g.currGen, g.maxHp))
+		// Font.Printf(" Latest improvement: %d;", g.latestImprovement)
+		// Font.Printf(fmt.Sprintf("\nBots amount: %d", len(g.Bots)))
 		textClearfix()
 	})
 }

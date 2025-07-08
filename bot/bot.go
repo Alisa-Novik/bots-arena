@@ -3,22 +3,9 @@ package bot
 import (
 	"golab/util"
 	"math/rand"
-	"os"
-	"strconv"
-	"strings"
 )
 
 type Direction [2]int
-
-const genomeLen = 128
-const genomeMaxValue = 128
-const mutationRate = 2
-const botHp = 100
-
-type Genome struct {
-	Matrix  [genomeLen]int
-	Pointer int
-}
 
 var (
 	Up    = Direction{0, 1}
@@ -45,23 +32,6 @@ type Bot struct {
 	Usp       [2]int // unloading starting pos
 }
 
-func (b *Bot) PointerJumpBy(toAdd int) {
-	ptr := b.Genome.Pointer
-	nextPtr := ptr + toAdd
-	nextPtr %= genomeLen
-
-	b.Genome.Pointer = nextPtr
-}
-
-func (b *Bot) PointerJump() {
-	ptr := b.Genome.Pointer
-	toAdd := b.Genome.Matrix[ptr]
-	nextPtr := ptr + toAdd
-	nextPtr %= genomeLen
-
-	b.Genome.Pointer = nextPtr
-}
-
 func NewBot() Bot {
 	return Bot{
 		Dir:        RandomDir(),
@@ -80,10 +50,7 @@ func blueColor() [3]float32 {
 }
 
 func (parent *Bot) NewChild() Bot {
-	if rand.Intn(100) < 2 {
-		return NewBot()
-	}
-	doMutation := util.RollChance(4)
+	doMutation := util.RollChance(25)
 	return Bot{
 		Dir:        RandomDir(),
 		Genome:     NewMutatedGenome(parent.Genome, doMutation),
@@ -115,53 +82,10 @@ func mutatedColor(f [3]float32, doMutation bool) [3]float32 {
 	return newColor
 }
 
-func NewMutatedGenome(genome Genome, doMutation bool) Genome {
-	if !doMutation {
-		return genome
-	}
-	for range mutationRate {
-		mutationIdx := rand.Intn(genomeLen)
-		for i := range genome.Matrix {
-			if i == mutationIdx {
-				genome.Matrix[i] = rand.Intn(genomeMaxValue)
-			}
-		}
-	}
-	return genome
-}
-
 func NewEmptyInventory() Inventory {
 	return Inventory{Amount: 0}
 }
 
 func RandomDir() Direction {
 	return dirs[rand.Intn(4)]
-}
-
-func NewRandomGenome() Genome {
-	var g Genome
-	for i := range g.Matrix {
-		g.Matrix[i] = rand.Intn(genomeMaxValue)
-	}
-	g.Pointer = rand.Intn(genomeLen)
-	return g
-}
-
-func ReadGenome() *Genome {
-	data, _ := os.ReadFile("genome")
-	parts := strings.Split(strings.TrimSuffix(string(data), ","), ",")
-	var genome [128]int
-	for i := range genome {
-		genome[i], _ = strconv.Atoi(parts[i])
-	}
-	return &Genome{Matrix: genome}
-}
-
-func ExportGenome(b Bot) {
-	var bld strings.Builder
-	for _, v := range b.Genome.Matrix {
-		bld.WriteString(strconv.Itoa(v))
-		bld.WriteByte(',')
-	}
-	os.WriteFile("genome", []byte(bld.String()), 0644)
 }

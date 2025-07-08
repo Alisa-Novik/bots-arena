@@ -31,10 +31,10 @@ type Config struct {
 	BuildingGrabCost   int
 	BuildingBuildCost  int
 
-	FoodGrabHpGain int
-	FarmGrabGain   int
-	FarmGrabHpGain int
-	FarmBuildCost  int
+	FoodGrabHpGain  int
+	FarmGrabGain    int
+	FarmBuildHpGain int
+	FarmBuildCost   int
 
 	LogicStep time.Duration
 	Pause     bool
@@ -43,30 +43,30 @@ type Config struct {
 func NewConfig(useGenome *bool) Config {
 	return Config{
 		HpThreshold:     90,
-		MutationRate:    2,
+		MutationRate:    1,
 		BotChance:       3,
 		ResourceChance:  5,
-		NewGenThreshold: 5,
-		ChildrenByBot:   5,
-		InitialGenome:   getInitialGenome(*useGenome),
+		NewGenThreshold: 3,
+		ChildrenByBot:   15,
+		InitialGenome:   bot.GetInitialGenome(*useGenome),
 
 		ControllerInitialAmount: 10,
 		ControllerHpGain:        0,
 		ControllerGain:          -100,
 
-		SpawnerGrabCost: 100,
+		SpawnerGrabCost: 20,
 
-		ResourceGrabHpGain: 1,
-		ResourceGrabGain:   10,
+		ResourceGrabHpGain: 100,
+		ResourceGrabGain:   20,
 
-		BuildingGrabHpGain: 0,
-		BuildingGrabCost:   4,
+		BuildingGrabHpGain: 20,
+		BuildingGrabCost:   3,
 		BuildingBuildCost:  10,
 
-		FoodGrabHpGain: 100,
-		FarmGrabGain:   -1,
-		FarmGrabHpGain: -10,
-		FarmBuildCost:  10,
+		FoodGrabHpGain:  100,
+		FarmGrabGain:    -1,
+		FarmBuildHpGain: 20,
+		FarmBuildCost:   -10,
 
 		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,
@@ -83,11 +83,4 @@ func (c *Config) SpeedUp() {
 
 func (c *Config) Speed() int {
 	return int(c.LogicStep)
-}
-
-func getInitialGenome(enabled bool) *bot.Genome {
-	if !enabled {
-		return nil
-	}
-	return bot.ReadGenome()
 }
