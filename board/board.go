@@ -3,11 +3,12 @@ package board
 import (
 	"golab/bot"
 	"golab/util"
+
 	"golang.org/x/exp/rand"
 )
 
 type Occupant any
-type Position struct{ R, C int }
+type Position = util.Position
 type Wall struct{ Pos Position }
 
 type Resource struct {
@@ -20,6 +21,7 @@ type Food struct {
 }
 type Farm struct {
 	Pos    Position
+	Owner  *bot.Bot
 	Amount int
 }
 type Spawner struct {
@@ -124,7 +126,7 @@ func (b *Board) IsGrabable(pos Position) bool {
 	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos) || b.IsSpawner(pos)
 }
 
-const scaleFactor = 1
+const scaleFactor = 2
 const (
 	Rows = 40 * scaleFactor
 	Cols = 60 * scaleFactor
@@ -138,14 +140,6 @@ func NewRandomPosition() Position {
 
 func NewPosition(r, c int) Position {
 	return Position{C: c, R: r}
-}
-
-func (p Position) AddPos(other Position) Position {
-	return Position{C: p.C + other.C, R: p.R + other.R}
-}
-
-func (p Position) Add(r int, c int) Position {
-	return Position{C: p.C + c, R: p.R + r}
 }
 
 func NewBoard() *Board {

@@ -50,6 +50,9 @@ func blueColor() [3]float32 {
 }
 
 func (parent *Bot) NewChild() Bot {
+	if rand.Intn(1000) < 5 {
+		return NewBot()
+	}
 	doMutation := util.RollChance(25)
 	return Bot{
 		Dir:        RandomDir(),

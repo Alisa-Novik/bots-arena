@@ -41,4 +41,3 @@ func TestNewMutatedGenome(t *testing.T) {
 		})
 	}
 }
-

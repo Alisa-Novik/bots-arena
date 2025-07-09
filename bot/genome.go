@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"golab/util"
 	"math/rand"
 	"os"
 	"strconv"
@@ -42,10 +43,18 @@ type Opcode int
 
 const (
 	OpMove Opcode = iota
+	OpMoveAbs
+	OpCheckIfBro
 	OpTurn
 	OpLook
+	OpCheckHp
+	OpCheckInventory
 	OpGrab
+	OpPhoto
+	OpEatOther
 	OpBuild
+	OpShareHp
+	OpShareInventory
 )
 
 func (o Opcode) String() string {
@@ -61,13 +70,13 @@ func (o Opcode) String() string {
 	case OpBuild:
 		return "OpBuild"
 	}
-	return "OpJump"
+	return "OpJump/Unknown"
 }
 
 const genomeLen = 64
 const genomeMaxValue = 63
-const mutationRate = 3
-const botHp = 200
+const mutationRate = 2
+const botHp = 100
 
 type Genome struct {
 	Matrix  [genomeLen]int
@@ -85,6 +94,18 @@ func (b *Bot) PointerJumpBy(toAdd int) {
 
 func (b *Bot) CmdArg(i int) int {
 	return b.Genome.Matrix[b.ptrPlus(i)]
+}
+
+func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
+	dir := util.PosClock[b.CmdArg(1)%8]
+	return pos.Add(dir[0], dir[1])
+}
+
+func (b *Bot) IsBro(other *Bot) bool {
+	// if other == nil {
+	// 	return false
+	// }
+	return b.Genome.Matrix == other.Genome.Matrix
 }
 
 func (b *Bot) ptrPlus(add int) int {
@@ -124,8 +145,9 @@ func NewRandomGenome() Genome {
 	g.Matrix[6] = int(OpMove)
 	g.Matrix[7] = int(OpBuild)
 	g.Matrix[8] = int(BuildFarm)
-	g.Matrix[9] = int(OpTurn)
+	g.Matrix[9] = int(OpEatOther)
 	g.Matrix[10] = 4
+	g.Matrix[11] = int(OpPhoto)
 	g.Pointer = 0
 	return g
 }
