@@ -114,22 +114,22 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, board.Wall{Pos: pos})
 				continue
 			}
-			// if spawner, ok := oldBoard.At(pos).(board.Spawner); ok {
-			// 	g.Board.Set(pos, spawner)
-			// 	continue
-			// }
-			// if f, ok := oldBoard.At(pos).(board.Farm); ok {
-			// 	g.Board.Set(pos, f)
-			// 	continue
-			// }
-			// if fd, ok := oldBoard.At(pos).(board.Food); ok {
-			// 	g.Board.Set(pos, fd)
-			// 	continue
-			// }
-			// if bld, ok := oldBoard.At(pos).(board.Building); ok {
-			// 	g.Board.Set(pos, bld)
-			// 	continue
-			// }
+			if spawner, ok := oldBoard.At(pos).(board.Spawner); ok {
+				g.Board.Set(pos, spawner)
+				continue
+			}
+			if f, ok := oldBoard.At(pos).(board.Farm); ok {
+				g.Board.Set(pos, f)
+				continue
+			}
+			if fd, ok := oldBoard.At(pos).(board.Food); ok {
+				g.Board.Set(pos, fd)
+				continue
+			}
+			if bld, ok := oldBoard.At(pos).(board.Building); ok {
+				g.Board.Set(pos, bld)
+				continue
+			}
 			if c, ok := oldBoard.At(pos).(board.Controller); ok {
 				g.Board.Set(pos, c)
 				continue
@@ -196,60 +196,14 @@ func (g *Game) botsActions() {
 			// b.SaveGenomeIntoFile()
 		}
 		b.Hp--
+		b.Hp = min(b.Hp, 500)
 		if b.Hp <= 0 {
 			delete(g.Bots, pos)
 			g.Board.Clear(pos)
 			continue
 		}
 		g.botAction(pos, b)
-		if b.Hp > 200 {
-			newPos, ok := g.Board.FindEmptyPosAround(pos)
-			if !ok {
-				continue
-			}
-			child := b.NewChild()
-			b.Hp -= 100
-			g.Bots[newPos] = &child
-			g.Board.Set(newPos, &child)
-		}
 	}
-}
-
-func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
-	t1 := board.NewPosition(15, 40)
-	if !b.Unloading {
-		b.Unloading = true
-		b.Usp = [2]int{pos.R, pos.C}
-		board.PathToPt[b.Usp] = g.Board.FindPath(pos, t1)
-		newBots[pos] = b
-		return
-	}
-	path := board.PathToPt[b.Usp]
-	if len(path) == 0 {
-		b.Hp -= 30
-		b.Unloading = false
-		newBots[pos] = b
-		return
-	}
-	nextMove := board.NewPosition(path[0].R-pos.R, path[0].C-pos.C)
-	g.move(newBots, pos, nextMove, b)
-	board.PathToPt[b.Usp] = path[1:]
-}
-
-func (g *Game) move(next map[board.Position]bot.Bot, pos board.Position, dir board.Position, b bot.Bot) {
-	target := pos.AddPos(dir)
-
-	blocked := g.Board.IsWall(target) ||
-		!g.Board.IsEmpty(target) ||
-		next[target] != (bot.Bot{})
-
-	if blocked {
-		next[pos] = b
-	}
-
-	g.Board.Clear(pos)
-	g.Board.Set(target, b)
-	next[target] = b
 }
 
 func (g *Game) botAction(pos board.Position, b *bot.Bot) {
@@ -258,6 +212,22 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 		// fmt.Printf("opcode: %v\n", op)
 
 		switch op {
+		case bot.OpDivide:
+			if b.Hp < 200 {
+				b.PointerJumpBy(5)
+				return
+			}
+
+			newPos, ok := g.Board.FindEmptyPosAround(pos)
+			if !ok {
+				continue
+			}
+			child := b.NewChild()
+			b.Hp -= 100
+			g.Bots[newPos] = &child
+			g.Board.Set(newPos, &child)
+			return
+
 		case bot.OpMoveAbs:
 			b.Dir = util.PosClock[b.CmdArg(1)%8]
 			g.tryMove(pos, b)
@@ -276,6 +246,24 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(9)
 				continue
 			}
+
+		case bot.OpAttack:
+			attackPos := b.CmdArgDir(1, pos)
+			other, ok := g.Board.At(attackPos).(*bot.Bot)
+			if !ok {
+				b.PointerJumpBy(1)
+				continue
+			}
+			if b.Hp > other.Hp {
+				fmt.Printf("I attack %v. Hp: %d; other.Hp: %d\n", attackPos, b.Hp, other.Hp)
+				b.Hp -= other.Hp
+				other.Hp = 0
+				g.Board.Clear(attackPos)
+				delete(g.Bots, attackPos)
+			}
+			b.PointerJumpBy(5)
+			return
+
 		case bot.OpMove:
 			g.tryMove(pos, b)
 			b.PointerJumpBy(1)
@@ -293,7 +281,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			other, ok := g.Board.At(eatPos).(*bot.Bot)
 
 			if ok && b.Hp >= other.Hp {
-				fmt.Printf("I eat. Hp: %d; other.Hp: %d\n. Is bro? %v\n", b.Hp, other.Hp, b.IsBro(other))
+				// fmt.Printf("I eat. Hp: %d; other.Hp: %d\n. Is bro? %v\n", b.Hp, other.Hp, b.IsBro(other))
 				b.Hp += other.Hp
 				color := b.Color
 				b.Color = [3]float32{color[0] + 0.4, color[1], color[2]}
@@ -336,36 +324,88 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			sharePos := b.CmdArgDir(1, pos)
-			other, ok := g.Board.At(sharePos).(*bot.Bot)
-			if !ok {
+			shareAmount := b.CmdArg(2)
+			if b.Hp < shareAmount {
 				b.PointerJumpBy(5)
 				continue
 			}
-			other.Hp += 10
-			b.Hp -= 10
-			fmt.Printf("I share %d HP with %v. Is bro? %v\n", 10, sharePos, b.IsBro(other))
-			b.PointerJumpBy(1)
+			other, ok := g.Board.At(sharePos).(*bot.Bot)
+			if !ok {
+				b.PointerJumpBy(4)
+				continue
+			}
+			other.Hp += shareAmount
+			b.Hp -= shareAmount
+			fmt.Printf("I share %d HP with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
+			b.PointerJumpBy(3)
 			return
+
 		case bot.OpShareInventory:
 			if b.Inventory.Amount < 5 {
 				b.PointerJumpBy(5)
 				continue
 			}
 			sharePos := b.CmdArgDir(1, pos)
+			shareAmount := b.CmdArg(2)
 			other, ok := g.Board.At(sharePos).(*bot.Bot)
 			if !ok {
-				b.PointerJumpBy(5)
+				b.PointerJumpBy(3)
 				continue
 			}
-			other.Inventory.Amount += 3
-			b.Inventory.Amount -= 3
-			fmt.Printf("I share %d Inventory with %v. Is bro? %v\n", 3, sharePos, b.IsBro(other))
-			b.PointerJumpBy(1)
+			other.Inventory.Amount += shareAmount
+			b.Inventory.Amount -= shareAmount
+			fmt.Printf("I share %d Inventory with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
+			b.PointerJumpBy(2)
 			return
 
 		case bot.OpBuild:
 			g.build(pos, b)
 			b.PointerJumpBy(1)
+			continue
+
+		case bot.OpSetReg:
+			reg := b.CmdArg(1) % 4
+			val := b.CmdArg(2)
+			// fmt.Printf("I set reg %v to %v\n", reg, b.CmdArg(2))
+			b.Registers[reg] = val
+			b.PointerJumpBy(3)
+			return
+
+		case bot.OpIncReg:
+			reg := b.CmdArg(1) % 4
+			// fmt.Printf("I inc reg %v\n", reg)
+			b.Registers[reg]++
+			b.PointerJumpBy(2)
+			continue
+
+		case bot.OpDecReg:
+			reg := b.CmdArg(1) % 4
+			// fmt.Printf("I dec reg %v\n", reg)
+			b.Registers[reg]--
+			b.PointerJumpBy(2)
+			continue
+
+		case bot.OpCmpReg:
+			regA := b.CmdArg(1) % 4
+			regB := b.CmdArg(2) % 4
+			// fmt.Printf("I cmp reg %v to %v\n", regA, regB)
+			if b.Registers[regA] == b.Registers[regB] {
+				b.PointerJumpBy(3)
+			} else {
+				b.PointerJumpBy(3)
+			}
+			continue
+
+		case bot.OpJumpIfZero:
+			reg := b.CmdArg(1) % 4
+			// fmt.Printf("I jump if reg %v is zero\n", reg)
+			jump := b.CmdArg(2)
+			if b.Registers[reg] == 0 {
+				b.PointerJumpBy(3 + jump)
+			} else {
+				b.PointerJumpBy(3)
+			}
+			continue
 
 		default:
 			b.PointerJump()
@@ -389,7 +429,9 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) board.Position {
 func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	c := *g.config
 
-	dir := util.PosClock[b.CmdArg(1)%8]
+	// dir := util.PosClock[b.CmdArg(1)%8]
+	// TODO: decide. this is test one
+	dir := b.Dir
 	grabPos := pos.Add(dir[0], dir[1])
 
 	if !g.Board.IsGrabable(grabPos) {
@@ -416,7 +458,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	case board.Farm:
 		if v.Owner != b {
 			b.Inventory.Amount = 0
-			b.Hp += v.Amount + 50
+			g.Board.Clear(grabPos)
 			return
 		}
 		if b.Inventory.Amount <= 0 {
@@ -427,7 +469,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		g.Board.Set(grabPos, v)
 	case board.Food:
 		b.Hp += c.FoodGrabHpGain
-		g.Board.Set(grabPos, nil)
+		g.Board.Clear(grabPos)
 	case board.Controller:
 		b.Inventory.Amount += c.ControllerGain
 		v.Amount -= 1
@@ -504,7 +546,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		g.Board.Set(buildPos, board.Farm{
 			Pos:    buildPos,
 			Owner:  b,
-			Amount: 1,
+			Amount: c.FarmInitialAmount,
 		})
 		b.Hp += c.FarmBuildHpGain
 		b.Inventory.Amount += c.FarmBuildCost
@@ -514,7 +556,8 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 	dir := util.PosClock[b.CmdArg(1)%8]
 	lookPos := botPos.Add(dir[0], dir[1])
-
+	// reg := b.CmdArg(2) % 4
+	// b.Registers[reg] = 0
 	switch g.Board.At(lookPos).(type) {
 	case *bot.Bot:
 		other, ok := g.Bots[lookPos]

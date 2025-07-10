@@ -27,6 +27,7 @@ type Bot struct {
 	Hp         int
 	Color      [3]float32
 	HasSpawner bool
+	Registers  [4]int
 
 	Unloading bool
 	Usp       [2]int // unloading starting pos

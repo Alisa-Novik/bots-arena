@@ -91,7 +91,7 @@ func (b *Board) Clear(pos Position) {
 }
 
 func inside(p Position) bool {
-	return p.R >= 0 && p.C >= 0 && p.R < Rows && p.C < Cols
+	return p.R >= 0 && p.R < Rows
 }
 
 func (b *Board) FindEmptyPosAround(center Position) (Position, bool) {
@@ -126,10 +126,9 @@ func (b *Board) IsGrabable(pos Position) bool {
 	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos) || b.IsSpawner(pos)
 }
 
-const scaleFactor = 2
 const (
-	Rows = 40 * scaleFactor
-	Cols = 60 * scaleFactor
+	Rows = util.Rows
+	Cols = util.Cols
 )
 
 var PosClock = util.PosClock
@@ -175,7 +174,7 @@ func (b *Board) IsWall(pos Position) bool {
 	if !inside(pos) {
 		return true
 	}
-	return pos.C == 0 || pos.R == 0 || pos.C == Cols-1 || pos.R == Rows-1
+	return pos.R == 0 || pos.R == Rows-1
 }
 
 func (b *Board) IsResource(pos Position) bool {

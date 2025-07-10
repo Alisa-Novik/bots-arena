@@ -55,6 +55,15 @@ const (
 	OpBuild
 	OpShareHp
 	OpShareInventory
+	OpAttack
+	OpDivide
+
+	// Register Opcodes
+	OpSetReg
+	OpIncReg
+	OpDecReg
+	OpJumpIfZero
+	OpCmpReg
 )
 
 func (o Opcode) String() string {
@@ -75,7 +84,7 @@ func (o Opcode) String() string {
 
 const genomeLen = 64
 const genomeMaxValue = 63
-const mutationRate = 2
+const mutationRate = 3
 const botHp = 100
 
 type Genome struct {
@@ -102,10 +111,13 @@ func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
 }
 
 func (b *Bot) IsBro(other *Bot) bool {
-	// if other == nil {
-	// 	return false
-	// }
-	return b.Genome.Matrix == other.Genome.Matrix
+	differences := 0
+	for i := range len(b.Genome.Matrix) {
+		if b.Genome.Matrix[i] != other.Genome.Matrix[i] {
+			differences++
+		}
+	}
+	return differences <= 3
 }
 
 func (b *Bot) ptrPlus(add int) int {
@@ -136,18 +148,22 @@ func NewRandomGenome() Genome {
 	for i := range g.Matrix {
 		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
-	g.Matrix[0] = int(OpLook)
+	g.Matrix[0] = int(OpMove)
 	g.Matrix[1] = int(OpGrab)
-	g.Matrix[2] = int(OpMove)
+	g.Matrix[2] = int(OpLook)
 	g.Matrix[3] = int(OpTurn)
-	g.Matrix[4] = 2
+	g.Matrix[4] = int(OpCmpReg)
 	g.Matrix[5] = int(OpLook)
 	g.Matrix[6] = int(OpMove)
 	g.Matrix[7] = int(OpBuild)
 	g.Matrix[8] = int(BuildFarm)
 	g.Matrix[9] = int(OpEatOther)
-	g.Matrix[10] = 4
+	g.Matrix[10] = int(OpCmpReg)
 	g.Matrix[11] = int(OpPhoto)
+	g.Matrix[12] = int(OpBuild)
+	g.Matrix[13] = int(OpCmpReg)
+	g.Matrix[14] = int(OpCmpReg)
+	g.Matrix[15] = int(OpBuild)
 	g.Pointer = 0
 	return g
 }
