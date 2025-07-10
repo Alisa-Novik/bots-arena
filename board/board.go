@@ -15,6 +15,12 @@ type Resource struct {
 	Pos    Position
 	Amount int
 }
+type Water struct {
+}
+type Organics struct {
+	Pos    Position
+	Amount int
+}
 type Food struct {
 	Pos    Position
 	Amount int
@@ -34,6 +40,9 @@ type Controller struct {
 	Owner  *bot.Bot
 	Amount int
 }
+type Poison struct {
+	Pos Position
+}
 type Building struct {
 	Pos   Position
 	Owner *bot.Bot
@@ -44,6 +53,16 @@ type Board struct {
 }
 
 var PathToPt = make(map[[2]int][]Position)
+
+// TODO: finalize this
+func (b *Board) IsPreserved(o Occupant) bool {
+	switch o.(type) {
+	case Controller, Farm, Food, Poison, Building, Water:
+		return true
+	default:
+		return false
+	}
+}
 
 func (b *Board) FindPath(start, end Position) []Position {
 	if start == end {
@@ -119,7 +138,7 @@ func (b *Board) HasController() bool {
 func (b *Board) IsGrabable(pos Position) bool {
 	o := b.At(pos)
 	switch o.(type) {
-	case Farm, Food:
+	case Farm, Food, Poison:
 		return true
 	}
 

@@ -7,6 +7,7 @@ import (
 	conf "golab/config"
 	"golab/ui"
 	"golab/util"
+	"math/rand"
 	"time"
 )
 
@@ -69,6 +70,7 @@ var newGenerations = 0
 
 func (g *Game) Run() {
 	g.initialBotsGeneration(g.config.InitialGenome)
+	g.generateWater()
 	g.populateBoard()
 
 	for !ui.Window.ShouldClose() {
@@ -81,6 +83,25 @@ func (g *Game) Run() {
 	}
 }
 
+func (g *Game) generateWater() {
+	waterSpread := 3 * util.ScaleFactor
+	for range waterSpread {
+		center := board.NewRandomPosition()
+		radius := 1 + rand.Intn(4)
+		for dr := -radius; dr <= radius; dr++ {
+			for dc := -radius; dc <= radius+15; dc++ {
+				if rand.Float64() > 0.6 {
+					continue
+				}
+				pos := center.Add(dc, dr)
+				if !g.Board.IsWall(pos) {
+					g.Board.Set(pos, board.Water{})
+				}
+			}
+		}
+	}
+}
+
 func (g *Game) step() {
 	for time.Since(g.State.LastLogic) >= g.config.LogicStep {
 		// g.printDebugInfo()
@@ -90,7 +111,10 @@ func (g *Game) step() {
 			return
 		}
 		if len(g.Bots) <= g.config.NewGenThreshold {
-			g.newGeneration()
+			// g.newGeneration()
+			g.initialBotsGeneration(g.config.InitialGenome)
+			g.populateBoard()
+			return
 		}
 		g.botsActions()
 		g.environmentActions()
@@ -130,12 +154,24 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, bld)
 				continue
 			}
+			if c, ok := oldBoard.At(pos).(board.Water); ok {
+				g.Board.Set(pos, c)
+				continue
+			}
 			if c, ok := oldBoard.At(pos).(board.Controller); ok {
 				g.Board.Set(pos, c)
 				continue
 			}
 			if bot, hasBot := g.Bots[pos]; hasBot {
 				g.Board.Set(pos, bot)
+				continue
+			}
+			// if util.RollChanceOf(1000, g.config.PoisonChance) {
+			// 	g.Board.Set(pos, board.Food{Pos: pos, Amount: 1})
+			// 	continue
+			// }
+			if util.RollChanceOf(1000, g.config.PoisonChance) {
+				g.Board.Set(pos, board.Poison{Pos: pos})
 				continue
 			}
 			if util.RollChance(g.config.ResourceChance) {
@@ -199,7 +235,7 @@ func (g *Game) botsActions() {
 		b.Hp = min(b.Hp, 500)
 		if b.Hp <= 0 {
 			delete(g.Bots, pos)
-			g.Board.Clear(pos)
+			g.Board.Set(pos, board.Organics{Pos: pos, Amount: 10})
 			continue
 		}
 		g.botAction(pos, b)
@@ -213,7 +249,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		switch op {
 		case bot.OpDivide:
-			if b.Hp < 200 {
+			if b.Hp < 100 {
 				b.PointerJumpBy(5)
 				return
 			}
@@ -223,7 +259,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			child := b.NewChild()
-			b.Hp -= 100
+			b.Hp -= 15
 			g.Bots[newPos] = &child
 			g.Board.Set(newPos, &child)
 			return
@@ -291,13 +327,30 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			return
 
 		case bot.OpPhoto:
-			if util.RollChance(g.config.PhotoChance) {
+			row := pos.R
+			rows := util.Rows
+
+			var photoChance int
+			switch {
+			case row < rows*1/10:
+				photoChance = 90
+			case row < rows*2/10:
+				photoChance = 50
+			case row < rows*3/10:
+				photoChance = 30
+			default:
+				photoChance = 10
+			}
+
+			if util.RollChance(photoChance) {
 				b.Hp += g.config.PhotoHpGain
 			}
+			b.PointerJumpBy(1)
 			return
 
 		case bot.OpLook:
 			g.lookAround(pos, b)
+			continue
 
 		case bot.OpCheckInventory:
 			if b.Inventory.Amount > 70 {
@@ -312,6 +365,32 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			} else {
 				b.PointerJumpBy(5)
 			}
+
+		case bot.OpEatOrganicsAbs:
+			nextPos := b.CmdArgDir(1, pos)
+			o, ok := g.Board.At(nextPos).(board.Organics)
+			if !ok {
+				b.PointerJumpBy(2)
+				continue
+			}
+			fmt.Printf("I eat organics abs. Hp after: %d; \n", b.Hp)
+			b.Hp += o.Amount
+			g.Board.Clear(nextPos)
+			b.PointerJumpBy(1)
+			return
+
+		case bot.OpEatOrganics:
+			nextPos := pos.Add(b.Dir[0], b.Dir[1])
+			o, ok := g.Board.At(nextPos).(board.Organics)
+			if !ok {
+				b.PointerJumpBy(2)
+				continue
+			}
+			fmt.Printf("I eat organics . Hp after: %d; \n", b.Hp)
+			b.Hp += o.Amount
+			g.Board.Clear(nextPos)
+			b.PointerJumpBy(1)
+			return
 
 		case bot.OpGrab:
 			g.grab(pos, b)
@@ -440,6 +519,9 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 
 	switch v := g.Board.At(grabPos).(type) {
 	case board.Building:
+		if v.Owner == b {
+			return
+		}
 		b.Inventory.Amount += c.BuildingGrabGain
 		b.Hp += c.BuildingGrabHpGain
 		g.Board.Set(grabPos, nil)
@@ -470,6 +552,10 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	case board.Food:
 		b.Hp += c.FoodGrabHpGain
 		g.Board.Clear(grabPos)
+	case board.Poison:
+		b.Hp = 0
+		g.Board.Clear(pos)
+		g.Board.Clear(grabPos)
 	case board.Controller:
 		b.Inventory.Amount += c.ControllerGain
 		v.Amount -= 1
@@ -479,6 +565,9 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 			g.Board.Set(grabPos, v)
 		}
 	case board.Resource:
+		if b.Inventory.Amount > 10 {
+			b.Hp -= 10
+		}
 		b.Inventory.Amount += c.ResourceGrabGain
 		b.Hp += c.ResourceGrabHpGain
 		// Todo:  adjust
@@ -583,6 +672,12 @@ func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(7)
 	case board.Food:
 		b.PointerJumpBy(9)
+	case board.Poison:
+		b.PointerJumpBy(14)
+	case board.Water:
+		b.PointerJumpBy(15)
+	case board.Organics:
+		b.PointerJumpBy(3)
 	default:
 		b.PointerJumpBy(12)
 	}

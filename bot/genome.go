@@ -50,6 +50,8 @@ const (
 	OpCheckHp
 	OpCheckInventory
 	OpGrab
+	OpEatOrganics
+	OpEatOrganicsAbs
 	OpPhoto
 	OpEatOther
 	OpBuild
@@ -156,14 +158,14 @@ func NewRandomGenome() Genome {
 	g.Matrix[5] = int(OpLook)
 	g.Matrix[6] = int(OpMove)
 	g.Matrix[7] = int(OpBuild)
-	g.Matrix[8] = int(BuildFarm)
-	g.Matrix[9] = int(OpEatOther)
-	g.Matrix[10] = int(OpCmpReg)
-	g.Matrix[11] = int(OpPhoto)
-	g.Matrix[12] = int(OpBuild)
-	g.Matrix[13] = int(OpCmpReg)
-	g.Matrix[14] = int(OpCmpReg)
-	g.Matrix[15] = int(OpBuild)
+	// g.Matrix[8] = int(BuildFarm)
+	// g.Matrix[9] = int(OpEatOther)
+	// g.Matrix[10] = int(OpCmpReg)
+	// g.Matrix[11] = int(OpPhoto)
+	// g.Matrix[12] = int(OpBuild)
+	// g.Matrix[13] = int(OpCmpReg)
+	// g.Matrix[14] = int(OpCmpReg)
+	// g.Matrix[15] = int(OpBuild)
 	g.Pointer = 0
 	return g
 }

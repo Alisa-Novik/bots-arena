@@ -14,6 +14,7 @@ type Config struct {
 	MutationRate    int
 	BotChance       int
 	ResourceChance  int
+	PoisonChance    int
 	NewGenThreshold int
 	ChildrenByBot   int
 	DisableFarms    bool
@@ -50,14 +51,15 @@ func NewConfig(useGenome *bool) Config {
 	return Config{
 		HpThreshold:     90,
 		MutationRate:    1,
-		BotChance:       3,
+		BotChance:       5,
 		ResourceChance:  5,
+		PoisonChance:    10,
 		NewGenThreshold: 5,
 		ChildrenByBot:   20,
 		DisableFarms:    false,
 		InitialGenome:   bot.GetInitialGenome(*useGenome),
 
-		PhotoHpGain: -1,
+		PhotoHpGain: 1,
 		PhotoChance: 80,
 
 		ControllerInitialAmount: 10,
@@ -66,7 +68,7 @@ func NewConfig(useGenome *bool) Config {
 
 		SpawnerGrabCost: 20,
 
-		ResourceGrabHpGain: 30,
+		ResourceGrabHpGain: 50,
 		ResourceGrabGain:   5,
 
 		BuildingGrabHpGain:  0,
@@ -76,9 +78,9 @@ func NewConfig(useGenome *bool) Config {
 
 		FoodGrabHpGain:    250,
 		FarmGrabGain:      -1,
-		FarmBuildHpGain:   1,
-		FarmBuildCost:     1,
-		FarmInitialAmount: 1,
+		FarmBuildHpGain:   0,
+		FarmBuildCost:     2,
+		FarmInitialAmount: 0,
 
 		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,

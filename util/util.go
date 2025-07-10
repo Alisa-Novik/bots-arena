@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	ScaleFactor = 3
+	ScaleFactor = 2
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
 )

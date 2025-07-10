@@ -27,6 +27,7 @@ var ChestTexture uint32
 var SpawnerTexture uint32
 var WallTexture uint32
 var AppleTexture uint32
+var PoisonTexture uint32
 var FarmTexture uint32
 var OreTexture uint32
 
@@ -115,6 +116,7 @@ func PrepareUi() {
 	WallTexture = loadTexture("/home/alice/projects/golab/wall.png")
 	SpawnerTexture = loadTexture("/home/alice/projects/golab/spawner.png")
 	AppleTexture = loadTexture("/home/alice/projects/golab/apple.png")
+	PoisonTexture = loadTexture("/home/alice/projects/golab/poison.png")
 	FarmTexture = loadTexture("/home/alice/projects/golab/farm.png")
 	OreTexture = loadTexture("/home/alice/projects/golab/ore.png")
 
@@ -326,7 +328,25 @@ func DrawGrid(brd board.Board, bots map[board.Position]*bot.Bot) {
 				continue
 			}
 
+			if _, ok := brd.At(pos).(board.Water); ok {
+				drawQuad(x, y, 0, 0, 1, 1, 1)
+				continue
+			}
+
+			if _, ok := brd.At(pos).(board.Poison); ok {
+				drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
+				drawTexture(x, y, 1, 1, 1, 1, 1, PoisonTexture)
+				continue
+			}
+
+			if _, ok := brd.At(pos).(board.Organics); ok {
+				drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
+				drawQuad(x+0.3, y+0.3, 0.2, 0.8, 0.2, 0.7, 0.7)
+				continue
+			}
+
 			if _, ok := brd.At(pos).(board.Food); ok {
+				drawQuad(x, y, 0.2, 0.2, 0.2, 1, 1)
 				drawTexture(x, y, 1, 1, 1, 1, 1, AppleTexture)
 				continue
 			}
