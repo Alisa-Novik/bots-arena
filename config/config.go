@@ -1,5 +1,6 @@
 package config
 
+// TODO: get rid of bot dependency
 import (
 	"golab/bot"
 	"time"

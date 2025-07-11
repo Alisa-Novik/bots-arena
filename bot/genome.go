@@ -91,7 +91,12 @@ const botHp = 100
 
 type Genome struct {
 	Matrix  [genomeLen]int
+	Family  uint32
 	Pointer int
+}
+
+func (g Genome) Mutate() {
+	panic("unimplemented")
 }
 
 func (b *Bot) PointerJump() {
@@ -113,13 +118,16 @@ func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
 }
 
 func (b *Bot) IsBro(other *Bot) bool {
-	differences := 0
-	for i := range len(b.Genome.Matrix) {
+	diffs := 0
+	for i := range b.Genome.Matrix {
 		if b.Genome.Matrix[i] != other.Genome.Matrix[i] {
-			differences++
+			diffs++
+			if diffs > 3 {
+				return false
+			}
 		}
 	}
-	return differences <= 3
+	return true
 }
 
 func (b *Bot) ptrPlus(add int) int {

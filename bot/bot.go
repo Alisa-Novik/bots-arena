@@ -39,11 +39,15 @@ func NewBot() Bot {
 		Genome:     NewRandomGenome(),
 		Inventory:  NewEmptyInventory(),
 		Hp:         botHp,
-		Color:      blueColor(),
+		Color:      redColor(),
 		HasSpawner: false,
 		Unloading:  false,
 		Usp:        [2]int{0, 0},
 	}
+}
+
+func redColor() [3]float32 {
+	return [3]float32{1, 0, 0}
 }
 
 func blueColor() [3]float32 {

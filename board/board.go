@@ -3,6 +3,7 @@ package board
 import (
 	"golab/bot"
 	"golab/util"
+	"unsafe"
 
 	"golang.org/x/exp/rand"
 )
@@ -49,100 +50,10 @@ type Building struct {
 	Hp    int
 }
 type Board struct {
-	grid map[Position]Occupant
-}
-
-var PathToPt = make(map[[2]int][]Position)
-
-// TODO: finalize this
-func (b *Board) IsPreserved(o Occupant) bool {
-	switch o.(type) {
-	case Controller, Farm, Food, Poison, Building, Water:
-		return true
-	default:
-		return false
-	}
-}
-
-func (b *Board) FindPath(start, end Position) []Position {
-	if start == end {
-		return nil
-	}
-
-	type Node struct {
-		Pos  Position
-		Prev *Node
-	}
-
-	visited := make(map[Position]bool)
-	queue := []Node{{Pos: start}}
-
-	for len(queue) > 0 {
-		curr := queue[0]
-		queue = queue[1:]
-
-		if curr.Pos == end {
-			var path []Position
-			for n := &curr; n != nil; n = n.Prev {
-				path = append([]Position{n.Pos}, path...)
-			}
-			return path[1:]
-		}
-
-		if visited[curr.Pos] {
-			continue
-		}
-		visited[curr.Pos] = true
-
-		for _, dir := range PosClock {
-			next := curr.Pos.Add(dir[0], dir[1])
-			if !b.IsEmpty(next) || visited[next] {
-				continue
-			}
-			queue = append(queue, Node{Pos: next, Prev: &curr})
-		}
-	}
-	return nil
-}
-
-func (b *Board) Clear(pos Position) {
-	delete(b.grid, pos)
-}
-
-func inside(p Position) bool {
-	return p.R >= 0 && p.R < Rows
-}
-
-func (b *Board) FindEmptyPosAround(center Position) (Position, bool) {
-	for _, d := range PosClock {
-		pos := center.Add(d[0], d[1])
-		if inside(pos) && b.IsEmpty(pos) {
-			return pos, true
-		}
-	}
-	return Position{}, false
-}
-
-func (b *Board) HasController() bool {
-	for r := range Rows {
-		for c := range Cols {
-			pos := NewPosition(r, c)
-			if b.IsController(pos) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (b *Board) IsGrabable(pos Position) bool {
-	o := b.At(pos)
-	switch o.(type) {
-	case Farm, Food, Poison:
-		return true
-	}
-
-	return b.IsController(pos) || b.IsResource(pos) || b.IsBuilding(pos) || b.IsSpawner(pos)
+	grid     []Occupant
+	occupied []bool
+	dirty    []bool
+	patch    []int
 }
 
 const (
@@ -152,41 +63,144 @@ const (
 
 var PosClock = util.PosClock
 
+var PathToPt = make(map[[2]int][]Position)
+
+var neighbourIdx [Rows * Cols][8]int
+
+func (b *Board) PullPatch() []int {
+	p := b.patch
+	b.patch = b.patch[:0]
+	for _, i := range p {
+		b.dirty[i] = false
+	}
+	return p
+}
+
+func (b *Board) MarkClean(i int) {
+	b.dirty[i] = false
+}
+
+func (b *Board) MarkDirty(i int) {
+	if !b.dirty[i] {
+		b.dirty[i] = true
+		b.patch = append(b.patch, i)
+	}
+}
+
+func (b *Board) DirtyBitmap() []bool {
+	return b.dirty
+}
+
+func initNeighbourTable() {
+	for r := range Rows {
+		for c := range Cols {
+			idx := r*Cols + c
+			for n, d := range PosClock {
+				nr, nc := r+d[1], c+d[0]
+				if nr < 0 || nr >= Rows || nc < 0 || nc >= Cols {
+					neighbourIdx[idx][n] = -1
+					continue
+				}
+				neighbourIdx[idx][n] = nr*Cols + ((nc + Cols) % Cols)
+			}
+		}
+	}
+}
+
+func NewBoard() *Board {
+	initNeighbourTable()
+	return &Board{
+		grid:     make([]Occupant, Rows*Cols),
+		occupied: make([]bool, (Rows+1)*(Cols+1)),
+		dirty:    make([]bool, Rows*Cols),
+	}
+}
+
 func NewRandomPosition() Position {
 	return Position{C: rand.Intn(Cols), R: rand.Intn(Rows)}
 }
 
-func NewPosition(r, c int) Position {
-	return Position{C: c, R: r}
+func (b *Board) GetGrid() *[]Occupant {
+	return &b.grid
 }
 
-func NewBoard() *Board {
-	return &Board{
-		grid: make(map[Position]Occupant),
-	}
+func idx(p Position) int {
+	return util.Idx(p)
+}
+
+func (b *Board) Clear(pos Position) {
+	i := idx(pos)
+	b.occupied[i] = false
+	b.MarkDirty(i)
+	b.grid[i] = nil
 }
 
 func (b *Board) Set(pos Position, o Occupant) {
+	i := idx(pos)
 	if !inside(pos) {
 		return
 	}
-	if o == nil {
-		delete(b.grid, pos)
-		return
-	}
-	b.grid[pos] = o
+	b.occupied[i] = true
+	b.MarkDirty(i)
+	b.grid[i] = o
 }
 
 func (b *Board) IsEmpty(pos Position) bool {
-	if !inside(pos) {
+	if !(pos.R >= 0 && pos.R < Rows) {
 		return false
 	}
-	_, ok := b.grid[pos]
-	return !ok
+	return b.grid[idx(pos)] == nil
 }
 
 func (b *Board) At(pos Position) Occupant {
-	return b.grid[pos]
+	if !(pos.R >= 0 && pos.R < Rows) {
+		return nil
+	}
+	return b.grid[idx(pos)]
+}
+
+func (b *Board) IsPreserved(o Occupant) bool {
+	switch o.(type) {
+	case Controller, Farm, Food, Poison, Building, Water:
+		return true
+	default:
+		return false
+	}
+}
+
+func inside(p Position) bool {
+	return p.R >= 0 && p.R < Rows
+}
+
+func (b *Board) firstEmptyAround(idx int) int {
+
+	base := unsafe.Pointer(&neighbourIdx[idx][0])
+	size := unsafe.Sizeof(neighbourIdx[0][0]) // 8 on 64-bit, 4 on 32-bit
+
+	for i := range 8 {
+		n := *(*int)(unsafe.Pointer(uintptr(base) + uintptr(i)*size))
+		if n >= 0 && !b.occupied[n] {
+			return n
+		}
+	}
+	return -1
+}
+
+func (b *Board) FindEmptyPosAround(p Position) (Position, bool) {
+	n := b.firstEmptyAround(idx(p))
+	if n < 0 {
+		return Position{}, false
+	}
+	return Position{R: n / Cols, C: n % Cols}, true
+}
+
+func (b *Board) IsGrabable(pos Position) bool {
+	switch b.At(pos).(type) {
+	case Farm, Food, Poison, Controller, Resource, Building, Spawner:
+		return true
+	default:
+		return false
+	}
 }
 
 func (b *Board) IsWall(pos Position) bool {
@@ -194,36 +208,4 @@ func (b *Board) IsWall(pos Position) bool {
 		return true
 	}
 	return pos.R == 0 || pos.R == Rows-1
-}
-
-func (b *Board) IsResource(pos Position) bool {
-	if b.IsEmpty(pos) {
-		return false
-	}
-	_, ok := b.At(pos).(Resource)
-	return ok
-}
-
-func (b *Board) IsController(pos Position) bool {
-	if b.IsEmpty(pos) {
-		return false
-	}
-	_, ok := b.At(pos).(Controller)
-	return ok
-}
-
-func (b Board) IsSpawner(pos Position) bool {
-	if b.IsEmpty(pos) {
-		return false
-	}
-	_, ok := b.At(pos).(Spawner)
-	return ok
-}
-
-func (b *Board) IsBuilding(pos Position) bool {
-	if b.IsEmpty(pos) {
-		return false
-	}
-	_, ok := b.At(pos).(Building)
-	return ok
 }

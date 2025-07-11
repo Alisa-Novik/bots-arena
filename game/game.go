@@ -72,6 +72,7 @@ func (g *Game) Run() {
 	g.initialBotsGeneration(g.config.InitialGenome)
 	g.generateWater()
 	g.populateBoard()
+	ui.BuildStaticLayer(g.Board)
 
 	for !ui.Window.ShouldClose() {
 		if g.config.Pause {
@@ -103,21 +104,20 @@ func (g *Game) generateWater() {
 }
 
 func (g *Game) step() {
-	for time.Since(g.State.LastLogic) >= g.config.LogicStep {
-		// g.printDebugInfo()
-		if len(g.Bots) == 0 {
+	const maxLogicPerFrame = 15
+
+	for executed := 0; executed < maxLogicPerFrame &&
+		time.Since(g.State.LastLogic) >= g.config.LogicStep; executed++ {
+
+		switch n := len(g.Bots); {
+		case n == 0, n <= g.config.NewGenThreshold:
 			g.initialBotsGeneration(g.config.InitialGenome)
 			g.populateBoard()
-			return
+		default:
+			g.botsActions()
+			g.environmentActions()
 		}
-		if len(g.Bots) <= g.config.NewGenThreshold {
-			// g.newGeneration()
-			g.initialBotsGeneration(g.config.InitialGenome)
-			g.populateBoard()
-			return
-		}
-		g.botsActions()
-		g.environmentActions()
+
 		g.State.LastLogic = g.State.LastLogic.Add(g.config.LogicStep)
 	}
 }
@@ -140,6 +140,10 @@ func (g *Game) populateBoard() {
 			}
 			if spawner, ok := oldBoard.At(pos).(board.Spawner); ok {
 				g.Board.Set(pos, spawner)
+				continue
+			}
+			if _, ok := oldBoard.At(pos).(board.Organics); ok {
+				g.Board.Clear(pos)
 				continue
 			}
 			if f, ok := oldBoard.At(pos).(board.Farm); ok {
@@ -243,7 +247,7 @@ func (g *Game) botsActions() {
 }
 
 func (g *Game) botAction(pos board.Position, b *bot.Bot) {
-	for range 15 {
+	for range 3 {
 		op := bot.Opcode(b.Genome.Matrix[b.Genome.Pointer])
 		// fmt.Printf("opcode: %v\n", op)
 
@@ -259,7 +263,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			child := b.NewChild()
-			b.Hp -= 15
+			b.Hp -= 10
 			g.Bots[newPos] = &child
 			g.Board.Set(newPos, &child)
 			return
@@ -291,7 +295,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			if b.Hp > other.Hp {
-				fmt.Printf("I attack %v. Hp: %d; other.Hp: %d\n", attackPos, b.Hp, other.Hp)
+				// fmt.Printf("I attack %v. Hp: %d; other.Hp: %d\n", attackPos, b.Hp, other.Hp)
 				b.Hp -= other.Hp
 				other.Hp = 0
 				g.Board.Clear(attackPos)
@@ -373,7 +377,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(2)
 				continue
 			}
-			fmt.Printf("I eat organics abs. Hp after: %d; \n", b.Hp)
+			// fmt.Printf("I eat organics abs. Hp after: %d; \n", b.Hp)
 			b.Hp += o.Amount
 			g.Board.Clear(nextPos)
 			b.PointerJumpBy(1)
@@ -386,7 +390,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(2)
 				continue
 			}
-			fmt.Printf("I eat organics . Hp after: %d; \n", b.Hp)
+			// fmt.Printf("I eat organics . Hp after: %d; \n", b.Hp)
 			b.Hp += o.Amount
 			g.Board.Clear(nextPos)
 			b.PointerJumpBy(1)
@@ -415,7 +419,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			other.Hp += shareAmount
 			b.Hp -= shareAmount
-			fmt.Printf("I share %d HP with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
+			// fmt.Printf("I share %d HP with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
 			b.PointerJumpBy(3)
 			return
 
@@ -433,7 +437,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			other.Inventory.Amount += shareAmount
 			b.Inventory.Amount -= shareAmount
-			fmt.Printf("I share %d Inventory with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
+			// fmt.Printf("I share %d Inventory with %v. Is bro? %v\n", shareAmount, sharePos, b.IsBro(other))
 			b.PointerJumpBy(2)
 			return
 
@@ -501,6 +505,8 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) board.Position {
 	delete(g.Bots, oldPos)
 	g.Board.Clear(oldPos)
 	g.Board.Set(newPos, b)
+	g.Board.MarkDirty(util.Idx(newPos))
+	g.Board.MarkDirty(util.Idx(oldPos))
 	g.Bots[newPos] = b
 	return newPos
 }
@@ -512,6 +518,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	// TODO: decide. this is test one
 	dir := b.Dir
 	grabPos := pos.Add(dir[0], dir[1])
+	// fmt.Printf("grabbing %v\n", grabPos)
 
 	if !g.Board.IsGrabable(grabPos) {
 		return
@@ -616,9 +623,9 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		// })
 		// b.HasSpawner = true
 	case bot.BuildController:
-		if g.Board.HasController() {
-			return
-		}
+		// if g.Board.HasController() {
+		// 	return
+		// }
 		g.Board.Set(buildPos, board.Controller{
 			Pos:    buildPos,
 			Owner:  b,

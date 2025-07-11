@@ -3,28 +3,25 @@ package game
 import (
 	"golab/board"
 	"golab/bot"
+	"golab/util"
 )
 
-// func (g *Game) botAt(p board.Position) *bot.Bot     { return g.Bots[idx(p)] }
-// func (g *Game) setBot(p board.Position, b *bot.Bot) { g.Bots[idx(p)] = b }
-// func (g *Game) clearBot(p board.Position)           { g.Bots[idx(p)] = nil }
-//
-// func (g *Game) liveBotCount() int {
-// 	n := 0
-// 	for _, b := range g.Bots {
-// 		if b != nil {
-// 			n++
-// 		}
-// 	}
-// 	return n
-// }
+func (g *Game) liveBotCount() int {
+	n := 0
+	for _, b := range g.Bots {
+		if b != nil {
+			n++
+		}
+	}
+	return n
+}
 
 func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
-	t1 := board.NewPosition(15, 40)
+	t1 := util.Position{R: 15, C: 40}
 	if !b.Unloading {
 		b.Unloading = true
 		b.Usp = [2]int{pos.R, pos.C}
-		board.PathToPt[b.Usp] = g.Board.FindPath(pos, t1)
+		board.PathToPt[b.Usp] = util.FindPath(pos, t1, g.Board.IsEmpty)
 		newBots[pos] = b
 		return
 	}
@@ -35,7 +32,7 @@ func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]
 		newBots[pos] = b
 		return
 	}
-	nextMove := board.NewPosition(path[0].R-pos.R, path[0].C-pos.C)
+	nextMove := util.Position{R: path[0].R - pos.R, C: path[0].C - pos.C}
 	g.move(newBots, pos, nextMove, b)
 	board.PathToPt[b.Usp] = path[1:]
 }
