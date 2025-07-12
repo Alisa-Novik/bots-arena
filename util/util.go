@@ -8,12 +8,19 @@ const (
 	ScaleFactor = 5
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
+	Cells       = Rows * Cols
 )
 
 type Position struct{ R, C int }
 
+func NewPos(r, c int) Position {
+	nc := (c + Cols) % Cols
+	return Position{R: r, C: nc}
+}
+
 func (p Position) AddPos(other Position) Position {
-	return Position{C: p.C + other.C, R: p.R + other.R}
+	nc := (p.C + other.C + Cols) % Cols
+	return Position{C: nc, R: p.R + other.R}
 }
 
 func (p Position) Add(dr, dc int) Position {
@@ -26,7 +33,7 @@ func RollChanceOf(total, percent int) bool {
 	return rand.Intn(total) < percent
 }
 
-func UnIdx(idx int) Position {
+func PosOf(idx int) Position {
 	return Position{R: idx / Cols, C: idx % Cols}
 }
 

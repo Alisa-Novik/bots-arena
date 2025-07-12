@@ -1,9 +1,9 @@
 package game
 
 import (
-	"golab/board"
-	"golab/bot"
-	"golab/util"
+// "golab/board"
+// "golab/bot"
+// "golab/util"
 )
 
 func (g *Game) liveBotCount() int {
@@ -16,39 +16,39 @@ func (g *Game) liveBotCount() int {
 	return n
 }
 
-func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
-	t1 := util.Position{R: 15, C: 40}
-	if !b.Unloading {
-		b.Unloading = true
-		b.Usp = [2]int{pos.R, pos.C}
-		board.PathToPt[b.Usp] = util.FindPath(pos, t1, g.Board.IsEmpty)
-		newBots[pos] = b
-		return
-	}
-	path := board.PathToPt[b.Usp]
-	if len(path) == 0 {
-		b.Hp -= 30
-		b.Unloading = false
-		newBots[pos] = b
-		return
-	}
-	nextMove := util.Position{R: path[0].R - pos.R, C: path[0].C - pos.C}
-	g.move(newBots, pos, nextMove, b)
-	board.PathToPt[b.Usp] = path[1:]
-}
+// func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
+// 	t1 := util.Position{R: 15, C: 40}
+// 	if !b.Unloading {
+// 		b.Unloading = true
+// 		b.Usp = [2]int{pos.R, pos.C}
+// 		board.PathToPt[b.Usp] = util.FindPath(pos, t1, g.Board.IsEmpty)
+// 		newBots[pos] = b
+// 		return
+// 	}
+// 	path := board.PathToPt[b.Usp]
+// 	if len(path) == 0 {
+// 		b.Hp -= 30
+// 		b.Unloading = false
+// 		newBots[pos] = b
+// 		return
+// 	}
+// 	nextMove := util.Position{R: path[0].R - pos.R, C: path[0].C - pos.C}
+// 	g.move(newBots, pos, nextMove, b)
+// 	board.PathToPt[b.Usp] = path[1:]
+// }
 
-func (g *Game) move(next map[board.Position]bot.Bot, pos board.Position, dir board.Position, b bot.Bot) {
-	target := pos.AddPos(dir)
-
-	blocked := g.Board.IsWall(target) ||
-		!g.Board.IsEmpty(target) ||
-		next[target] != (bot.Bot{})
-
-	if blocked {
-		next[pos] = b
-	}
-
-	g.Board.Clear(pos)
-	g.Board.Set(target, b)
-	next[target] = b
-}
+// func (g *Game) move(next map[board.Position]bot.Bot, pos board.Position, dir board.Position, b bot.Bot) {
+// 	target := pos.AddPos(dir)
+//
+// 	blocked := g.Board.IsWall(target) ||
+// 		!g.Board.IsEmpty(target) ||
+// 		next[target] != (bot.Bot{})
+//
+// 	if blocked {
+// 		next[pos] = b
+// 	}
+//
+// 	g.Board.Clear(pos)
+// 	g.Board.Set(target, b)
+// 	next[target] = b
+// }

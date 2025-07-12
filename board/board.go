@@ -36,8 +36,14 @@ type Spawner struct {
 	Owner  *bot.Bot
 	Amount int
 }
+type Mine struct {
+	Pos    Position
+	Owner  *bot.Bot
+	Amount int
+}
 type Controller struct {
 	Pos    Position
+	Colony *bot.Colony
 	Owner  *bot.Bot
 	Amount int
 }
@@ -137,7 +143,7 @@ func (b *Board) Clear(pos Position) {
 
 func (b *Board) Set(pos Position, o Occupant) {
 	i := idx(pos)
-	if !inside(pos) {
+	if !Inside(pos) {
 		return
 	}
 	b.occupied[i] = true
@@ -149,11 +155,12 @@ func (b *Board) IsEmpty(pos Position) bool {
 	if !(pos.R >= 0 && pos.R < Rows) {
 		return false
 	}
+
 	return b.grid[idx(pos)] == nil
 }
 
 func (b *Board) At(pos Position) Occupant {
-	if !(pos.R >= 0 && pos.R < Rows) {
+	if pos.R < 0 || pos.R >= Rows {
 		return nil
 	}
 	return b.grid[idx(pos)]
@@ -168,12 +175,11 @@ func (b *Board) IsPreserved(o Occupant) bool {
 	}
 }
 
-func inside(p Position) bool {
+func Inside(p Position) bool {
 	return p.R >= 0 && p.R < Rows
 }
 
 func (b *Board) firstEmptyAround(idx int) int {
-
 	base := unsafe.Pointer(&neighbourIdx[idx][0])
 	size := unsafe.Sizeof(neighbourIdx[0][0]) // 8 on 64-bit, 4 on 32-bit
 
@@ -204,7 +210,7 @@ func (b *Board) IsGrabable(pos Position) bool {
 }
 
 func (b *Board) IsWall(pos Position) bool {
-	if !inside(pos) {
+	if !Inside(pos) {
 		return true
 	}
 	return pos.R == 0 || pos.R == Rows-1

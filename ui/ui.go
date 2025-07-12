@@ -1,10 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"golab/board"
 	"golab/bot"
 	"golab/config"
-	"golab/util"
 	"image"
 	"os"
 	"time"
@@ -25,6 +25,33 @@ var Window *glfw.Window
 
 var BotTexture uint32
 
+var (
+	clrGrey  = [3]float32{0.2, 0.2, 0.2}
+	clrWhite = [3]float32{1, 1, 1}
+	clrLight = clrWhite
+	clrDark  = clrGrey
+)
+
+var (
+	uvFood    = [4]float32{0 * tile, 0, 1 * tile, 1}
+	uvWall    = [4]float32{1 * tile, 0, 2 * tile, 1}
+	uvOre     = [4]float32{2 * tile, 0, 3 * tile, 1}
+	uvPoison  = [4]float32{3 * tile, 0, 4 * tile, 1}
+	uvChest   = [4]float32{4 * tile, 0, 5 * tile, 1}
+	uvFarm    = [4]float32{5 * tile, 0, 6 * tile, 1}
+	uvSpawner = [4]float32{6 * tile, 0, 7 * tile, 1}
+	uvLight   = [4]float32{7 * tile, 0, 8 * tile, 1}
+	uvBot     = [4]float32{8 * tile, 0, 9 * tile, 1}
+	uvDark    = [4]float32{9 * tile, 0, 10 * tile, 1}
+)
+
+var (
+	uvEmpty    = uvDark
+	clrDefault = clrGrey
+	// uvEmpty    = uvLight
+	// clrDefault = clrLight
+)
+
 var conf *config.Config
 var gameState *config.GameState
 
@@ -42,19 +69,7 @@ var (
 var drawShark = true
 var Font *gltext.Font
 
-const tile = 1.0 / 8.0
-
-var (
-	uvFood    = [4]float32{0 * tile, 0, 1 * tile, 1}
-	uvWall    = [4]float32{1 * tile, 0, 2 * tile, 1}
-	uvOre     = [4]float32{2 * tile, 0, 3 * tile, 1}
-	uvPoison  = [4]float32{3 * tile, 0, 4 * tile, 1}
-	uvChest   = [4]float32{4 * tile, 0, 5 * tile, 1}
-	uvFarm    = [4]float32{5 * tile, 0, 5 * tile, 1}
-	uvSpawner = [4]float32{6 * tile, 0, 5 * tile, 1}
-	uvEmpty   = [4]float32{7 * tile, 0, 7 * tile, 1}
-	grey      = [3]float32{0.8, 0.8, 0.8}
-)
+const tile = 1.0 / 10.0
 
 type v = struct{ x, y, u, v, r, g, b, a float32 }
 
@@ -91,7 +106,7 @@ func BuildStaticLayer(brd *board.Board) {
 		pos := board.Position{R: idx / board.Cols, C: idx % board.Cols}
 		col, uv := pickSprite(occ)
 		if occ == nil || mayVanish(occ) {
-			writeQuad(vertsDyn, idx*vPerQuad, pos, [3]float32{1, 1, 1}, uvEmpty)
+			writeQuad(vertsDyn, idx*vPerQuad, pos, clrDefault, uvEmpty)
 			continue
 		}
 		writeQuad(vertsStat, statPos, pos, col, uv)
@@ -195,13 +210,16 @@ func PrepareUi() {
 
 	const path = "/home/alice/projects/golab/"
 	BotTexture = loadTexture(path + "bot.jpg")
-
 	vertsDyn = make([]v, maxVerts)
+	for idx := range maxCells {
+		p := board.Position{R: idx / board.Cols, C: idx % board.Cols}
+		writeQuad(vertsDyn, idx*vPerQuad, p, clrDefault, uvEmpty)
+	}
+	dynVertCount = len(vertsDyn)
 
 	gl.GenBuffers(1, &vboDynamic)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboDynamic)
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertsDyn)*int(stride), nil, gl.DYNAMIC_DRAW)
-
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertsDyn)*int(stride), gl.Ptr(vertsDyn), gl.DYNAMIC_DRAW)
 	atlasTex = loadTexture(path + "sprites/atlas.png")
 	enableAttribs()
 
@@ -211,7 +229,8 @@ func PrepareUi() {
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.LoadIdentity()
 
-	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
+	r, g, b := clrDefault[0], clrDefault[1], clrDefault[2]
+	gl.ClearColor(r, g, b, 1)
 	Window = window
 }
 
@@ -381,29 +400,36 @@ func drawFloatingPane(offsetX float32, renderText func()) {
 	renderText()
 }
 
-func pickSprite(o board.Occupant) (colour [3]float32, uv [4]float32) {
+func pickSprite(o board.Occupant) (color [3]float32, uv [4]float32) {
 	switch o := o.(type) {
 	case *bot.Bot:
 		r, g, b := o.Color[0], o.Color[1], o.Color[2]
-		return [3]float32{r, g, b}, uvEmpty
-	case board.Wall:
-		return grey, uvWall
+		return [3]float32{r, g, b}, uvLight
+		// return defaultColor, uvBot
 	case board.Food:
 		return [3]float32{1, 0, 0.8}, uvFood
 	case board.Water:
-		return [3]float32{0, 0, 0.8}, uvEmpty
+		return [3]float32{0, 0, 0.8}, uvLight
 	case board.Organics:
-		return [3]float32{0, 0.8, 0}, uvEmpty
+		return [3]float32{0, 0.8, 0}, uvLight
+	case board.Building:
+		return clrLight, uvWall
+	case board.Wall:
+		return clrLight, uvWall
+	case board.Controller:
+		return clrLight, uvChest
+	case board.Mine:
+		return clrLight, uvSpawner
 	case board.Resource:
-		return grey, uvOre
+		return clrLight, uvOre
 	case board.Farm:
-		return grey, uvFarm
+		return clrLight, uvFarm
 	case board.Poison:
-		return grey, uvPoison
+		return clrLight, uvPoison
 	case nil:
-		return [3]float32{0.2, 0.2, 0.2}, uvEmpty
+		return clrDefault, uvEmpty
 	default:
-		return [3]float32{0.2, 0.2, 0.2}, uvEmpty
+		return clrDefault, uvEmpty
 	}
 }
 
@@ -415,45 +441,83 @@ const (
 )
 const stride = int32(8 * 4)
 
-func DrawGrid(brd board.Board, bots map[board.Position]*bot.Bot) {
+var dynVertCount int
+
+func DrawGrid(brd *board.Board, bots []*bot.Bot) {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 	ApplyCamera()
 
-	// mark every bot-occupied cell dirty
-	for p := range bots {
-		brd.MarkDirty(util.Idx(p))
+	// 1. any cell with a bot is dirty this frame
+	for idx, b := range bots {
+		if b != nil {
+			brd.MarkDirty(idx)
+		}
 	}
 
+	// -----------------------------------------------------------------------------
+	// Upload only contiguous runs of dirty tiles – FIX #2 (crash-free)
+	// -----------------------------------------------------------------------------
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboDynamic)
+
+	// helpers --------------------------------------------------------------------
+	runStart := -1 // first dirty cell in current run (-1 == no run yet)
+	prevIdx := -2  // previous dirty cell index
+
+	flushRun := func(first, last int) {
+		if first < 0 {
+			return
+		}
+		nCells := last - first + 1
+		baseVert := first * vPerQuad
+		nVerts := nCells * vPerQuad
+		byteOff := int32(baseVert) * stride
+
+		gl.BufferSubData(gl.ARRAY_BUFFER, int(byteOff), nVerts*int(stride), gl.Ptr(vertsDyn[baseVert:baseVert+nVerts]))
+	}
+	// -----------------------------------------------------------------------------
 
 	for idx, dirty := range brd.DirtyBitmap() {
 		if !dirty {
+			if runStart >= 0 { // end of a run
+				flushRun(runStart, prevIdx) // push it
+				runStart = -1
+			}
 			continue
+		}
+
+		// -------- tile idx IS dirty --------
+		p := Position{R: idx / board.Cols, C: idx % board.Cols}
+		col, uv := pickSprite(brd.At(p))
+		base := idx * vPerQuad
+		writeQuad(vertsDyn, base, p, col, uv)
+		if base+vPerQuad > dynVertCount {
+			dynVertCount = base + vPerQuad
 		}
 		brd.MarkClean(idx)
 
-		p := Position{R: idx / board.Cols, C: idx % board.Cols}
-		col, uv := pickSprite(brd.At(p))
-
-		base := idx * vPerQuad
-		writeQuad(vertsDyn, base, p, col, uv)
-
-		byteOffset := int32(base) * stride
-		quadSlice := vertsDyn[base : base+vPerQuad]
-
-		gl.BufferSubData(gl.ARRAY_BUFFER,
-			int(byteOffset),
-			vPerQuad*int(stride),
-			gl.Ptr(quadSlice))
+		// build / extend the run
+		if idx == prevIdx+1 && runStart >= 0 {
+			// still contiguous – just extend
+		} else {
+			// new run; flush previous if any
+			if runStart >= 0 {
+				flushRun(runStart, prevIdx)
+			}
+			runStart = idx
+		}
+		prevIdx = idx
 	}
+	// any pending run left?
+	flushRun(runStart, prevIdx)
 
+	// 4. draw everything
 	gl.BindTexture(gl.TEXTURE_2D, atlasTex)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboStatic)
-	gl.DrawArrays(gl.QUADS, 0, int32(len(vertsStat))) // walls, etc.
+	gl.DrawArrays(gl.QUADS, 0, int32(len(vertsStat))) // static layer
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboDynamic)
-	gl.DrawArrays(gl.QUADS, 0, int32(len(vertsDyn))) // bots & co.
+	gl.DrawArrays(gl.QUADS, 0, int32(dynVertCount)) // dynamic layer
 
 	drawOverlay()
 	Window.SwapBuffers()
@@ -485,6 +549,7 @@ func drawOverlay() {
 
 	drawFloatingPane(500, func() {
 		Font.Printf(520, 20, "Test")
+		Font.Printf(520, 40, fmt.Sprintf("Live bots: %d", conf.LiveBots))
 		// Font.Printf(fmt.Sprintf("\nGeneration: %d; Max HP: %d;", g.currGen, g.maxHp))
 		// Font.Printf(" Latest improvement: %d;", g.latestImprovement)
 		// Font.Printf(fmt.Sprintf("\nBots amount: %d", len(g.Bots)))

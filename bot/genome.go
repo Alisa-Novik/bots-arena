@@ -16,6 +16,7 @@ const (
 	BuildSpawner
 	BuildController
 	BuildBuilding
+	BuildMine
 	numBuildTypes
 )
 
@@ -33,6 +34,8 @@ func (b BuildType) String() string {
 		return "BuildSpawner"
 	case BuildController:
 		return "BuildController"
+	case BuildMine:
+		return "BuildMine"
 	case BuildBuilding:
 		return "BuildBuilding"
 	}
@@ -59,6 +62,7 @@ const (
 	OpShareInventory
 	OpAttack
 	OpDivide
+	// OpTrade
 
 	// Register Opcodes
 	OpSetReg
@@ -84,15 +88,17 @@ func (o Opcode) String() string {
 	return "OpJump/Unknown"
 }
 
-const genomeLen = 64
-const genomeMaxValue = 63
-const mutationRate = 3
+const genomeLen = 256
+const genomeMaxValue = genomeLen - 1
+const mutationRate = 2
 const botHp = 100
 
 type Genome struct {
-	Matrix  [genomeLen]int
-	Family  uint32
-	Pointer int
+	Matrix    [genomeLen]int
+	Family    uint32
+	Pointer   int
+	NextArg   int
+	Registers [4]int
 }
 
 func (g Genome) Mutate() {
@@ -117,12 +123,37 @@ func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
 	return pos.Add(dir[0], dir[1])
 }
 
+const maxDifferences = 3
+
+func (b *Bot) IsOffspring(parent *Bot) bool {
+	if b == parent {
+		return true
+	}
+	for o := range parent.Offsprings {
+		if o.IsOffspring(parent) {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *Bot) FromSameColony(other *Bot) bool {
+	return b.Colony == other.Colony
+}
+
 func (b *Bot) IsBro(other *Bot) bool {
-	diffs := 0
+	// diff := bits.OnesCount64(b.hashLo^other.hashLo) +
+	// 	bits.OnesCount64(b.hashHi^other.hashHi)
+	// if diff > maxDifferences*2 {
+	// 	return false
+	// }
+
+	// fall back to exact check (very rare)
+	differences := 0
 	for i := range b.Genome.Matrix {
 		if b.Genome.Matrix[i] != other.Genome.Matrix[i] {
-			diffs++
-			if diffs > 3 {
+			differences++
+			if differences > maxDifferences {
 				return false
 			}
 		}
@@ -132,8 +163,8 @@ func (b *Bot) IsBro(other *Bot) bool {
 
 func (b *Bot) ptrPlus(add int) int {
 	ptr := b.Genome.Pointer
-	if ptr >= 64 {
-		panic("ptrPlus: ptr >= 64")
+	if ptr > genomeMaxValue {
+		panic("ptrPlus: ptr >= 128")
 	}
 	return (ptr + add) % genomeLen
 }
@@ -159,13 +190,13 @@ func NewRandomGenome() Genome {
 		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
 	g.Matrix[0] = int(OpMove)
-	g.Matrix[1] = int(OpGrab)
-	g.Matrix[2] = int(OpLook)
-	g.Matrix[3] = int(OpTurn)
-	g.Matrix[4] = int(OpCmpReg)
-	g.Matrix[5] = int(OpLook)
-	g.Matrix[6] = int(OpMove)
-	g.Matrix[7] = int(OpBuild)
+	// g.Matrix[1] = int(OpGrab)
+	// g.Matrix[2] = int(OpLook)
+	// g.Matrix[3] = int(OpTurn)
+	// g.Matrix[4] = int(OpCmpReg)
+	// g.Matrix[5] = int(OpLook)
+	// g.Matrix[6] = int(OpMove)
+	// g.Matrix[7] = int(OpBuild)
 	// g.Matrix[8] = int(BuildFarm)
 	// g.Matrix[9] = int(OpEatOther)
 	// g.Matrix[10] = int(OpCmpReg)
@@ -181,7 +212,7 @@ func NewRandomGenome() Genome {
 func ReadGenome() *Genome {
 	data, _ := os.ReadFile("genome")
 	parts := strings.Split(strings.TrimSuffix(string(data), ","), ",")
-	var genome [64]int
+	var genome [genomeLen]int
 	for i := range genome {
 		genome[i], _ = strconv.Atoi(parts[i])
 	}
