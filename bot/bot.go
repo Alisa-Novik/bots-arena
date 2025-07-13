@@ -87,11 +87,15 @@ func NewBot() Bot {
 		Parent:     nil,
 		Offsprings: make(map[*Bot]struct{}),
 		Hp:         botHp,
-		Color:      blueColor(),
+		Color:      randomColor(),
 		HasSpawner: false,
 		Unloading:  false,
 		Usp:        [2]int{0, 0},
 	}
+}
+
+func (b *Bot) ReassignColor() {
+	b.Color = [3]float32{rand.Float32(), rand.Float32(), rand.Float32()}
 }
 
 func randomColor() [3]float32 {

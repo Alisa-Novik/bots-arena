@@ -28,7 +28,7 @@ type Config struct {
 	ControllerInitialAmount int
 	ControllerHpGain        int
 	ControllerGrabHpGain    int
-	ControllerGain          int
+	ControllerGrabCost      int
 
 	SpawnerGrabCost int
 
@@ -41,7 +41,7 @@ type Config struct {
 	BuildingBuildHpGain int
 
 	FoodGrabHpGain    int
-	FarmGrabGain      int
+	FarmGrabCost      int
 	FarmBuildHpGain   int
 	FarmBuildCost     int
 	FarmInitialAmount int
@@ -74,25 +74,25 @@ func NewConfig(useGenome *bool) Config {
 		ControllerInitialAmount: 1000,
 		ControllerHpGain:        1,
 		ControllerGrabHpGain:    15,
-		ControllerGain:          1,
+		ControllerGrabCost:      1,
 
 		SpawnerGrabCost:    20,
 		ResourceGrabGain:   5,
-		ResourceGrabHpGain: 5,
+		ResourceGrabHpGain: 150,
 
-		BuildingGrabHpGain:  5,
+		BuildingGrabHpGain:  15,
 		BuildingGrabGain:    1,
 		BuildingBuildCost:   1,
 		BuildingBuildHpGain: 5,
 
 		FoodGrabHpGain:    250,
-		FarmGrabGain:      -1,
-		FarmBuildHpGain:   1,
-		FarmBuildCost:     2,
+		FarmGrabCost:      -1,
+		FarmBuildHpGain:   10,
+		FarmBuildCost:     1,
 		FarmInitialAmount: 0,
 
 		MineBuildCost:  1,
-		MineGrabGain:   300,
+		MineGrabGain:   30,
 		MineGrabHpCost: 10,
 
 		LogicStep: 100000000 * time.Nanosecond * 3,

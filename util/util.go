@@ -18,9 +18,13 @@ func NewPos(r, c int) Position {
 	return Position{R: r, C: nc}
 }
 
+func RowInside(p Position) bool {
+	return p.R >= Rows || p.R < 0
+}
+
 func (p Position) AddPos(other Position) Position {
 	nc := (p.C + other.C + Cols) % Cols
-	return Position{C: nc, R: p.R + other.R}
+	return Position{R: p.R + other.R, C: nc}
 }
 
 func (p Position) Add(dr, dc int) Position {

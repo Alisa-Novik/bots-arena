@@ -111,14 +111,18 @@ func (g *Game) handleController(controller *board.Controller, pos util.Position,
 				b.Inventory.Amount--
 			}
 			if controller.Amount <= 0 {
-				b.Hp -= 15
-				return
+				if b.Colony == controller.Colony {
+					b.Hp += 5
+				} else {
+					b.Hp -= 2
+				}
+				continue
 			}
 			if b.Colony == controller.Colony {
 				b.Hp += 15
 				controller.Amount--
 			} else {
-				// b.Hp -= 10
+				b.Hp -= 15
 			}
 		}
 	}
@@ -299,15 +303,15 @@ func (g *Game) botsActions() {
 func (g *Game) calcHpChange() int {
 	var hpChange int
 	if g.config.LiveBots > 15000 {
-		hpChange = 30
+		hpChange = 15
 	} else if g.config.LiveBots > 10000 {
-		hpChange = 20
-	} else if g.config.LiveBots > 5000 {
 		hpChange = 10
+	} else if g.config.LiveBots > 5000 {
+		hpChange = 4
 	} else if g.config.LiveBots > 3000 {
-		hpChange = 5
+		hpChange = 3
 	} else if g.config.LiveBots > 1000 {
-		hpChange = 1
+		hpChange = 2
 	} else {
 		hpChange = 1
 	}
@@ -321,7 +325,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		switch op {
 		case bot.OpDivide:
-			if b.Hp < 80 {
+			if b.Hp < 90 {
 				b.PointerJumpBy(5)
 				return
 			}
@@ -419,7 +423,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 			if util.RollChance(photoChance) {
 				// b.Hp += g.config.PhotoHpGain
-				b.Hp += g.calcHpChange()
+				b.Hp += 1
 				dc := g.config.ColorDelta
 				color := b.Color
 				b.Color = [3]float32{color[0] - dc, color[1] + dc, color[2] - dc}
@@ -439,6 +443,22 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			} else {
 				b.PointerJumpBy(2)
 			}
+			continue
+
+		case bot.OpExecuteInstr:
+			return
+
+		case bot.OpHpToResource:
+			// arg := b.CmdArg(1) % 4
+			// hpChange := arg * 10
+			// if b.Hp < hpChange {
+			// 	b.PointerJumpBy(3)
+			// 	return
+			// }
+			// b.Hp -= hpChange
+			// b.Inventory.Amount += arg
+			// b.PointerJumpBy(2)
+			return
 
 		case bot.OpCheckHp:
 			b.Genome.NextArg = b.Hp
@@ -447,6 +467,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			} else {
 				b.PointerJumpBy(5)
 			}
+			continue
 
 		case bot.OpEatOrganicsAbs:
 			nextPos := b.CmdArgDir(1, pos)
@@ -520,6 +541,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		case bot.OpBuild:
 			g.build(pos, b)
+			g.Board.Set(pos, b)
 			continue
 
 		case bot.OpSetReg:
@@ -563,6 +585,29 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			} else {
 				b.PointerJumpBy(3)
 			}
+			continue
+
+		case bot.OpSendSignal:
+			dir := b.CmdArgDir(1, pos)
+			sendPos := pos.AddPos(dir)
+			if util.RowInside(sendPos) {
+				return
+			}
+			i := idx(sendPos)
+			other := g.Bots[i]
+			if other == nil {
+				continue
+			}
+			commands := 4 // arbitrary value
+			sigVal := b.CmdArg(2) % commands
+			other.Genome.Signal = sigVal
+			b.PointerJumpBy(2)
+			continue
+
+		case bot.OpCheckSignal:
+			sigVal := b.Genome.Signal
+			b.Genome.Signal = 0
+			b.PointerJumpBy(sigVal + 1)
 			continue
 
 		default:
@@ -636,7 +681,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		if b.Inventory.Amount <= 0 {
 			return
 		}
-		b.Inventory.Amount += c.FarmGrabGain
+		b.Inventory.Amount -= c.FarmGrabCost
 		v.Amount += 1
 		g.Board.Set(grabPos, v)
 		b.PointerJumpBy(3)
@@ -655,10 +700,19 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		return
 	case board.Controller:
 		if !v.Owner.FromSameColony(b) {
-			g.Board.Set(grabPos, nil)
+			// arg := b.CmdArg(1) % 2
+			// if arg == 0 {
+			// 	v.Colony = b.Colony
+			// 	v.Owner = b
+			// 	b.PointerJumpBy(9)
+			// } else {
+			// g.Board.Set(grabPos, nil)
+			// v.Owner.Colony = nil
+			b.PointerJumpBy(10)
+			// }
 			return
 		}
-		b.Inventory.Amount -= c.ControllerGain
+		b.Inventory.Amount -= c.ControllerGrabCost
 		b.Hp += c.ControllerHpGain
 		v.Amount += 1
 		g.Board.Set(grabPos, v)
@@ -751,6 +805,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 			Colony: &colony,
 			Amount: c.ControllerInitialAmount,
 		})
+		b.ReassignColor()
 		b.Hp += c.ControllerHpGain
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
@@ -772,7 +827,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		if c.DisableFarms {
 			return
 		}
-		if b.Inventory.Amount < -c.FarmBuildCost {
+		if b.Inventory.Amount < c.FarmBuildCost {
 			return
 		}
 		g.Board.Set(buildPos, board.Farm{
@@ -781,7 +836,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 			Amount: c.FarmInitialAmount,
 		})
 		b.Hp += c.FarmBuildHpGain
-		b.Inventory.Amount += c.FarmBuildCost
+		b.Inventory.Amount -= c.FarmBuildCost
 		b.PointerJumpBy(5)
 		b.Genome.NextArg = 5
 		return

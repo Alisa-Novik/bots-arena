@@ -3,7 +3,6 @@ package board
 import (
 	"golab/bot"
 	"golab/util"
-	"unsafe"
 
 	"golang.org/x/exp/rand"
 )
@@ -180,11 +179,9 @@ func Inside(p Position) bool {
 }
 
 func (b *Board) firstEmptyAround(idx int) int {
-	base := unsafe.Pointer(&neighbourIdx[idx][0])
-	size := unsafe.Sizeof(neighbourIdx[0][0]) // 8 on 64-bit, 4 on 32-bit
-
-	for i := range 8 {
-		n := *(*int)(unsafe.Pointer(uintptr(base) + uintptr(i)*size))
+	start := rand.Intn(8)
+	for i := 0; i < 8; i++ {
+		n := neighbourIdx[idx][(start+i)&7]
 		if n >= 0 && !b.occupied[n] {
 			return n
 		}

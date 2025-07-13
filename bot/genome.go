@@ -52,6 +52,7 @@ const (
 	OpLook
 	OpCheckHp
 	OpCheckInventory
+	OpHpToResource
 	OpGrab
 	OpEatOrganics
 	OpEatOrganicsAbs
@@ -62,7 +63,9 @@ const (
 	OpShareInventory
 	OpAttack
 	OpDivide
-	// OpTrade
+	OpCheckSignal
+	OpSendSignal
+	OpExecuteInstr
 
 	// Register Opcodes
 	OpSetReg
@@ -88,7 +91,7 @@ func (o Opcode) String() string {
 	return "OpJump/Unknown"
 }
 
-const genomeLen = 256
+const genomeLen = 128
 const genomeMaxValue = genomeLen - 1
 const mutationRate = 2
 const botHp = 100
@@ -98,6 +101,7 @@ type Genome struct {
 	Family    uint32
 	Pointer   int
 	NextArg   int
+	Signal    int
 	Registers [4]int
 }
 
@@ -190,7 +194,14 @@ func NewRandomGenome() Genome {
 		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
 	g.Matrix[0] = int(OpMove)
-	// g.Matrix[1] = int(OpGrab)
+	g.Matrix[1] = int(OpGrab)
+	g.Matrix[1] = int(OpGrab)
+	g.Matrix[2] = int(OpGrab)
+	g.Matrix[3] = int(OpGrab)
+	g.Matrix[4] = int(OpBuild)
+	g.Matrix[5] = int(OpBuild)
+	g.Matrix[6] = int(OpBuild)
+	g.Matrix[7] = int(OpBuild)
 	// g.Matrix[2] = int(OpLook)
 	// g.Matrix[3] = int(OpTurn)
 	// g.Matrix[4] = int(OpCmpReg)

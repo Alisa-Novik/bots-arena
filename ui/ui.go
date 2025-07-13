@@ -404,8 +404,8 @@ func pickSprite(o board.Occupant) (color [3]float32, uv [4]float32) {
 	switch o := o.(type) {
 	case *bot.Bot:
 		r, g, b := o.Color[0], o.Color[1], o.Color[2]
-		return [3]float32{r, g, b}, uvLight
-		// return defaultColor, uvBot
+		clr := [3]float32{r, g, b}
+		return clr, uvBot
 	case board.Food:
 		return [3]float32{1, 0, 0.8}, uvFood
 	case board.Water:
