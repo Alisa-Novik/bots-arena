@@ -37,10 +37,10 @@ func main() {
 	}()
 
 	headless := flag.Bool("h", false, "is headless mode?")
-	useGenome := flag.Bool("i", false, "run with initial genome")
 	flag.Parse()
 
-	config := config.NewConfig(useGenome)
+	// config := config.LoadFromJson("conf.json")
+	config := config.NewConfig()
 	g := game.NewGame(&config)
 
 	ui.SetConfig(&config)

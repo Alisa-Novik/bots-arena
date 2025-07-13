@@ -91,9 +91,9 @@ func (o Opcode) String() string {
 	return "OpJump/Unknown"
 }
 
-const genomeLen = 128
+const genomeLen = 64
 const genomeMaxValue = genomeLen - 1
-const mutationRate = 2
+const mutationRate = 4
 const botHp = 100
 
 type Genome struct {
@@ -139,6 +139,10 @@ func (b *Bot) IsOffspring(parent *Bot) bool {
 		}
 	}
 	return false
+}
+
+func (b *Bot) FromString(other *Bot) bool {
+	return b.Colony == other.Colony
 }
 
 func (b *Bot) FromSameColony(other *Bot) bool {
@@ -195,13 +199,13 @@ func NewRandomGenome() Genome {
 	}
 	g.Matrix[0] = int(OpMove)
 	g.Matrix[1] = int(OpGrab)
-	g.Matrix[1] = int(OpGrab)
-	g.Matrix[2] = int(OpGrab)
-	g.Matrix[3] = int(OpGrab)
-	g.Matrix[4] = int(OpBuild)
-	g.Matrix[5] = int(OpBuild)
-	g.Matrix[6] = int(OpBuild)
-	g.Matrix[7] = int(OpBuild)
+	g.Matrix[2] = int(OpBuild)
+	// g.Matrix[2] = int(OpGrab)
+	// g.Matrix[3] = int(OpGrab)
+	// g.Matrix[4] = int(OpBuild)
+	// g.Matrix[5] = int(OpBuild)
+	// g.Matrix[6] = int(OpBuild)
+	// g.Matrix[7] = int(OpBuild)
 	// g.Matrix[2] = int(OpLook)
 	// g.Matrix[3] = int(OpTurn)
 	// g.Matrix[4] = int(OpCmpReg)
@@ -220,9 +224,8 @@ func NewRandomGenome() Genome {
 	return g
 }
 
-func ReadGenome() *Genome {
-	data, _ := os.ReadFile("genome")
-	parts := strings.Split(strings.TrimSuffix(string(data), ","), ",")
+func readGenome(data string) *Genome {
+	parts := strings.Split(strings.TrimSuffix(data, ","), ",")
 	var genome [genomeLen]int
 	for i := range genome {
 		genome[i], _ = strconv.Atoi(parts[i])
@@ -243,5 +246,6 @@ func GetInitialGenome(enabled bool) *Genome {
 	if !enabled {
 		return nil
 	}
-	return ReadGenome()
+	data, _ := os.ReadFile("genome")
+	return readGenome(string(data))
 }

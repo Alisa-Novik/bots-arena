@@ -12,11 +12,12 @@ import (
 )
 
 type Game struct {
-	Board    *board.Board
-	Bots     []*bot.Bot
-	Colonies []*bot.Colony
-	config   *conf.Config
-	State    *conf.GameState
+	Board         *board.Board
+	Bots          []*bot.Bot
+	Colonies      []*bot.Colony
+	InitialGenome *bot.Genome
+	config        *conf.Config
+	State         *conf.GameState
 
 	maxHp             int
 	currGen           int
@@ -28,21 +29,23 @@ func idx(p board.Position) int {
 }
 
 func NewGame(config *conf.Config) *Game {
+	useInitialGenome := config.UseInitialGenome
 	return &Game{
-		Board:   board.NewBoard(),
-		Bots:    make([]*bot.Bot, util.Cells),
-		config:  config,
-		State:   &conf.GameState{LastLogic: time.Now()},
-		maxHp:   0,
-		currGen: 0,
+		Board:         board.NewBoard(),
+		Bots:          make([]*bot.Bot, util.Cells),
+		InitialGenome: bot.GetInitialGenome(useInitialGenome),
+		config:        config,
+		State:         &conf.GameState{LastLogic: time.Now()},
+		maxHp:         0,
+		currGen:       0,
 	}
 }
 
 func (g *Game) RunHeadless() {
-	g.initialBotsGeneration(nil)
+	g.initialBotsGeneration()
 	for {
 		if g.liveBotCount() < g.config.NewGenThreshold {
-			g.initialBotsGeneration(nil)
+			g.initialBotsGeneration()
 		}
 		g.botsActions()
 		g.environmentActions()
@@ -95,7 +98,11 @@ func (g *Game) killBot(b *bot.Bot, botIdx int) {
 }
 
 // TODO: subject to optimization
-func (g *Game) handleController(controller *board.Controller, pos util.Position, radius int) {
+func (g *Game) handleController(ctrl *board.Controller, pos util.Position, radius int) {
+	if ctrl.Owner == nil {
+		g.Board.Clear(pos)
+		return
+	}
 	for r := -radius; r <= radius; r++ {
 		for c := -radius; c <= radius; c++ {
 			botPos := pos.Add(r, c)
@@ -106,30 +113,31 @@ func (g *Game) handleController(controller *board.Controller, pos util.Position,
 			if b == nil {
 				continue
 			}
-			if controller.Amount <= 0 && b.Inventory.Amount > 0 {
-				controller.Amount++
+			if ctrl.Amount <= 0 && b.Inventory.Amount > 0 {
+				ctrl.Amount++
 				b.Inventory.Amount--
 			}
-			if controller.Amount <= 0 {
-				if b.Colony == controller.Colony {
-					b.Hp += 5
+			if ctrl.Amount <= 0 {
+				if b.Colony == ctrl.Colony {
+					// b.Hp += g.calcHpChange()
+					// b.Hp += 1
 				} else {
-					b.Hp -= 2
+					b.Hp -= 0
 				}
 				continue
 			}
-			if b.Colony == controller.Colony {
-				b.Hp += 15
-				controller.Amount--
+			if b.Colony == ctrl.Colony {
+				b.Hp += 25
+				ctrl.Amount--
 			} else {
-				b.Hp -= 15
+				b.Hp -= 5
 			}
 		}
 	}
 }
 
 func (g *Game) Run() {
-	g.initialBotsGeneration(g.config.InitialGenome)
+	g.initialBotsGeneration()
 	g.generateWater()
 	g.populateBoard()
 	ui.BuildStaticLayer(g.Board)
@@ -169,8 +177,10 @@ func (g *Game) step() {
 		maxLogicPerFrame = 64
 	} else if g.config.LiveBots < 5000 {
 		maxLogicPerFrame = 32
-	} else {
+	} else if g.config.LiveBots < 25000 {
 		maxLogicPerFrame = 16
+	} else {
+		maxLogicPerFrame = 8
 	}
 
 	for executed := 0; executed < maxLogicPerFrame &&
@@ -179,7 +189,7 @@ func (g *Game) step() {
 		g.config.LiveBots = g.liveBotCount()
 		switch n := g.config.LiveBots; {
 		case n == 0, n <= g.config.NewGenThreshold:
-			g.initialBotsGeneration(g.config.InitialGenome)
+			g.initialBotsGeneration()
 			g.populateBoard()
 		default:
 			g.botsActions()
@@ -260,7 +270,7 @@ func (g *Game) populateBoard() {
 
 var newGenerations = 0
 
-func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
+func (g *Game) initialBotsGeneration() {
 	fmt.Printf("initialBotsGeneration, %v\n", newGenerations)
 	newGenerations += 1
 	for r := range board.Rows {
@@ -270,8 +280,8 @@ func (g *Game) initialBotsGeneration(initialGenome *bot.Genome) {
 				continue
 			}
 			b := bot.NewBot()
-			if initialGenome != nil {
-				b.Genome = *initialGenome
+			if g.InitialGenome != nil {
+				b.Genome = *g.InitialGenome
 			}
 			g.Bots[idx(pos)] = &b
 			g.Board.Set(pos, &b)
@@ -285,11 +295,12 @@ func (g *Game) botsActions() {
 			continue
 		}
 		pos := util.PosOf(i)
-		b.Hp -= g.calcHpChange()
+		// b.Hp -= g.calcHpChange()
+		b.Hp -= 1
 		b.Hp = min(b.Hp, 500)
 		if b.Hp <= 0 {
 			g.killBot(b, i)
-			if rand.Intn(100) < 3 {
+			if rand.Intn(100) < 33 {
 				g.Board.Set(pos, board.Organics{Pos: pos, Amount: g.config.OrganicInitialAmount})
 			} else {
 				g.Board.Clear(pos)
@@ -302,16 +313,18 @@ func (g *Game) botsActions() {
 
 func (g *Game) calcHpChange() int {
 	var hpChange int
-	if g.config.LiveBots > 15000 {
-		hpChange = 15
-	} else if g.config.LiveBots > 10000 {
-		hpChange = 10
-	} else if g.config.LiveBots > 5000 {
-		hpChange = 4
-	} else if g.config.LiveBots > 3000 {
+	if g.config.LiveBots > 20000 {
 		hpChange = 3
-	} else if g.config.LiveBots > 1000 {
+	} else if g.config.LiveBots > 15000 {
 		hpChange = 2
+	} else if g.config.LiveBots > 10000 {
+		hpChange = 2
+	} else if g.config.LiveBots > 5000 {
+		hpChange = 1
+	} else if g.config.LiveBots > 3000 {
+		hpChange = 1
+	} else if g.config.LiveBots > 1000 {
+		hpChange = 1
 	} else {
 		hpChange = 1
 	}
@@ -325,7 +338,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		switch op {
 		case bot.OpDivide:
-			if b.Hp < 90 {
+			if b.Hp < 100 {
 				b.PointerJumpBy(5)
 				return
 			}
@@ -335,7 +348,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			child := b.NewChild()
-			b.Hp -= 50
+			b.Hp -= g.config.DivisionCost
 			g.Bots[idx(newPos)] = child
 			g.Board.Set(newPos, child)
 			return
@@ -369,11 +382,13 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			if b.Hp > other.Hp {
 				// fmt.Printf("I attack %v. Hp: %d; other.Hp: %d\n", attackPos, b.Hp, other.Hp)
 				b.Hp -= other.Hp
-				other.Hp = 0
+				if other.Inventory.Amount > 0 {
+					b.Inventory.Amount += other.Inventory.Amount
+				}
 				g.Board.Clear(attackPos)
 				g.killBot(other, idx(attackPos))
 			}
-			b.PointerJumpBy(5)
+			b.PointerJumpBy(2)
 			return
 
 		case bot.OpMove:
@@ -393,6 +408,10 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			other, ok := g.Board.At(eatPos).(*bot.Bot)
 
 			if ok && b.Hp >= other.Hp {
+				if other.FromSameColony(b) {
+					b.PointerJumpBy(1)
+					return
+				}
 				// fmt.Printf("I eat. Hp: %d; other.Hp: %d\n. Is bro? %v\n", b.Hp, other.Hp, b.IsBro(other))
 				b.Hp += other.Hp
 				color := b.Color
@@ -403,6 +422,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				g.Board.Clear(eatPos)
 				g.killBot(other, idx(eatPos))
 			}
+			b.PointerJumpBy(2)
 			return
 
 		case bot.OpPhoto:
@@ -446,7 +466,8 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			continue
 
 		case bot.OpExecuteInstr:
-			return
+			b.PointerJumpBy(b.CmdArg(1))
+			continue
 
 		case bot.OpHpToResource:
 			// arg := b.CmdArg(1) % 4
@@ -457,7 +478,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			// }
 			// b.Hp -= hpChange
 			// b.Inventory.Amount += arg
-			// b.PointerJumpBy(2)
+			b.PointerJumpBy(2)
 			return
 
 		case bot.OpCheckHp:
@@ -501,7 +522,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		case bot.OpShareHp:
 			if b.Hp < 20 {
-				b.PointerJumpBy(5)
+				b.PointerJumpBy(6)
 				continue
 			}
 			sharePos := b.CmdArgDir(1, pos)
@@ -706,8 +727,8 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 			// 	v.Owner = b
 			// 	b.PointerJumpBy(9)
 			// } else {
-			// g.Board.Set(grabPos, nil)
-			// v.Owner.Colony = nil
+			g.Board.Set(grabPos, nil)
+			v.Owner.Colony = nil
 			b.PointerJumpBy(10)
 			// }
 			return
@@ -720,9 +741,9 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.Genome.NextArg = 5
 		return
 	case board.Resource:
-		if b.Inventory.Amount > 10 {
-			b.Hp -= 10
-		}
+		// if b.Inventory.Amount > 10 {
+		// 	b.Hp -= 10
+		// }
 		b.Inventory.Amount += c.ResourceGrabGain
 		b.Hp += c.ResourceGrabHpGain
 		// Todo:  adjust

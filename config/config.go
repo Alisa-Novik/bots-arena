@@ -1,8 +1,8 @@
 package config
 
-// TODO: get rid of bot dependency
 import (
-	"golab/bot"
+	"encoding/json"
+	"os"
 	"time"
 )
 
@@ -11,65 +11,66 @@ type GameState struct {
 }
 
 type Config struct {
-	HpThreshold     int
-	ColorDelta      float32
-	MutationRate    int
-	BotChance       int
-	ResourceChance  int
-	PoisonChance    int
-	NewGenThreshold int
-	ChildrenByBot   int
-	DisableFarms    bool
-	InitialGenome   *bot.Genome
+	HpThreshold      int     `json:"hpThreshold"`
+	ColorDelta       float32 `json:"colorDelta"`
+	MutationRate     int     `json:"mutationRate"`
+	BotChance        int     `json:"botChance"`
+	ResourceChance   int     `json:"resourceChance"`
+	PoisonChance     int     `json:"poisonChance"`
+	NewGenThreshold  int     `json:"newGenThreshold"`
+	ChildrenByBot    int     `json:"childrenByBot"`
+	DivisionCost     int     `json:"divisionCost"`
+	DisableFarms     bool    `json:"disableFarms"`
+	UseInitialGenome bool    `json:"useInitialGenome"`
 
-	PhotoHpGain          int
-	OrganicInitialAmount int
+	PhotoHpGain          int `json:"photoHpGain"`
+	OrganicInitialAmount int `json:"organicInitialAmount"`
 
-	ControllerInitialAmount int
-	ControllerHpGain        int
-	ControllerGrabHpGain    int
-	ControllerGrabCost      int
+	ControllerInitialAmount int `json:"controllerInitialAmount"`
+	ControllerHpGain        int `json:"controllerHpGain"`
+	ControllerGrabHpGain    int `json:"controllerGrabHpGain"`
+	ControllerGrabCost      int `json:"controllerGrabCost"`
 
-	SpawnerGrabCost int
+	SpawnerGrabCost    int `json:"spawnerGrabCost"`
+	ResourceGrabGain   int `json:"resourceGrabGain"`
+	ResourceGrabHpGain int `json:"resourceGrabHpGain"`
 
-	ResourceGrabHpGain int
-	ResourceGrabGain   int
+	BuildingGrabHpGain  int `json:"buildingGrabHpGain"`
+	BuildingGrabGain    int `json:"buildingGrabGain"`
+	BuildingBuildCost   int `json:"buildingBuildCost"`
+	BuildingBuildHpGain int `json:"buildingBuildHpGain"`
 
-	BuildingGrabHpGain  int
-	BuildingGrabGain    int
-	BuildingBuildCost   int
-	BuildingBuildHpGain int
+	FoodGrabHpGain    int `json:"foodGrabHpGain"`
+	FarmGrabCost      int `json:"farmGrabCost"`
+	FarmBuildHpGain   int `json:"farmBuildHpGain"`
+	FarmBuildCost     int `json:"farmBuildCost"`
+	FarmInitialAmount int `json:"farmInitialAmount"`
 
-	FoodGrabHpGain    int
-	FarmGrabCost      int
-	FarmBuildHpGain   int
-	FarmBuildCost     int
-	FarmInitialAmount int
+	MineBuildCost  int `json:"mineBuildCost"`
+	MineGrabGain   int `json:"mineGrabGain"`
+	MineGrabHpCost int `json:"mineGrabHpCost"`
 
-	MineBuildCost  int
-	MineGrabGain   int
-	MineGrabHpCost int
-
-	LogicStep time.Duration
-	Pause     bool
-	LiveBots  int
+	LogicStep time.Duration `json:"logicStep"`
+	Pause     bool          `json:"pause"`
+	LiveBots  int           `json:"liveBots"`
 }
 
-func NewConfig(useGenome *bool) Config {
+func NewConfig() Config {
 	return Config{
-		HpThreshold:     90,
-		ColorDelta:      float32(0.05),
-		MutationRate:    1,
-		BotChance:       5,
-		ResourceChance:  5,
-		PoisonChance:    3,
-		NewGenThreshold: 5,
-		ChildrenByBot:   20,
-		DisableFarms:    false,
-		InitialGenome:   bot.GetInitialGenome(*useGenome),
+		HpThreshold:      90,
+		ColorDelta:       float32(0.05),
+		MutationRate:     1,
+		BotChance:        5,
+		ResourceChance:   5,
+		PoisonChance:     3,
+		NewGenThreshold:  5,
+		ChildrenByBot:    20,
+		DivisionCost:     10,
+		DisableFarms:     false,
+		UseInitialGenome: false,
 
 		PhotoHpGain:          1,
-		OrganicInitialAmount: 10,
+		OrganicInitialAmount: 5,
 
 		ControllerInitialAmount: 1000,
 		ControllerHpGain:        1,
@@ -80,20 +81,20 @@ func NewConfig(useGenome *bool) Config {
 		ResourceGrabGain:   5,
 		ResourceGrabHpGain: 150,
 
-		BuildingGrabHpGain:  15,
+		BuildingGrabHpGain:  100,
 		BuildingGrabGain:    1,
 		BuildingBuildCost:   1,
-		BuildingBuildHpGain: 5,
+		BuildingBuildHpGain: 25,
 
 		FoodGrabHpGain:    250,
 		FarmGrabCost:      -1,
-		FarmBuildHpGain:   10,
+		FarmBuildHpGain:   100,
 		FarmBuildCost:     1,
 		FarmInitialAmount: 0,
 
 		MineBuildCost:  1,
 		MineGrabGain:   30,
-		MineGrabHpCost: 10,
+		MineGrabHpCost: 30,
 
 		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,
@@ -111,4 +112,15 @@ func (c *Config) SpeedUp() {
 
 func (c *Config) Speed() int {
 	return int(c.LogicStep)
+}
+
+func LoadFromJson(file string) Config {
+	confJson, err := os.Open(file)
+	if err != nil {
+		panic(err)
+	}
+	defer confJson.Close()
+	var conf Config
+	json.NewDecoder(confJson).Decode(&conf)
+	return conf
 }
