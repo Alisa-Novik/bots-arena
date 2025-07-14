@@ -48,6 +48,7 @@ const (
 	OpMove Opcode = iota
 	OpMoveAbs
 	OpCheckIfBro
+	OpCheckColony
 	OpTurn
 	OpLook
 	OpCheckHp
@@ -91,7 +92,7 @@ func (o Opcode) String() string {
 	return "OpJump/Unknown"
 }
 
-const genomeLen = 64
+const genomeLen = 256
 const genomeMaxValue = genomeLen - 1
 const mutationRate = 4
 const botHp = 100
@@ -145,7 +146,7 @@ func (b *Bot) FromString(other *Bot) bool {
 	return b.Colony == other.Colony
 }
 
-func (b *Bot) FromSameColony(other *Bot) bool {
+func (b *Bot) SameColony(other *Bot) bool {
 	return b.Colony == other.Colony
 }
 
@@ -197,9 +198,9 @@ func NewRandomGenome() Genome {
 	for i := range g.Matrix {
 		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
-	g.Matrix[0] = int(OpMove)
-	g.Matrix[1] = int(OpGrab)
-	g.Matrix[2] = int(OpBuild)
+	// g.Matrix[0] = int(OpMove)
+	// g.Matrix[1] = int(OpGrab)
+	// g.Matrix[2] = int(OpBuild)
 	// g.Matrix[2] = int(OpGrab)
 	// g.Matrix[3] = int(OpGrab)
 	// g.Matrix[4] = int(OpBuild)

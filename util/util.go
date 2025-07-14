@@ -5,11 +5,31 @@ import (
 )
 
 const (
-	ScaleFactor = 10
+	ScaleFactor = 5
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
 	Cells       = Rows * Cols
 )
+
+type Direction [2]int
+
+type Queue[T any] struct {
+	data []T
+}
+
+func (q *Queue[T]) Enqueue(x T) {
+	q.data = append(q.data, x)
+}
+
+func (q *Queue[T]) Dequeue() T {
+	x := q.data[0]
+	q.data = q.data[1:]
+	return x
+}
+
+func (q *Queue[T]) Empty() bool {
+	return len(q.data) == 0
+}
 
 type Position struct{ R, C int }
 
@@ -18,13 +38,19 @@ func NewPos(r, c int) Position {
 	return Position{R: r, C: nc}
 }
 
-func RowInside(p Position) bool {
-	return p.R >= Rows || p.R < 0
+func OutOfBounds(p Position) bool {
+	return p.R >= Rows-1 || p.R < 1
 }
 
 func (p Position) AddPos(other Position) Position {
 	nc := (p.C + other.C + Cols) % Cols
 	return Position{R: p.R + other.R, C: nc}
+}
+
+func (p Position) AddDir(dir Direction) Position {
+	nr := p.R + dir[1]
+	nc := (p.C + dir[0] + Cols) % Cols
+	return Position{R: nr, C: nc}
 }
 
 func (p Position) Add(dr, dc int) Position {
@@ -93,4 +119,8 @@ func FindPath(start, end Position, isEmpty func(Position) bool) []Position {
 		}
 	}
 	return nil
+}
+
+func GreenColor() [3]float32 {
+	return [3]float32{0, 1, 0}
 }

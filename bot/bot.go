@@ -6,7 +6,24 @@ import (
 	"sync"
 )
 
-type Direction [2]int
+type Direction = util.Direction
+
+type Bot struct {
+	Dir           Direction
+	Genome        Genome
+	Inventory     Inventory
+	Colony        *Colony
+	PathsToColony int
+	Parent        *Bot
+	Offsprings    map[*Bot]struct{}
+	Hp            int
+	Color         [3]float32
+	HasSpawner    bool
+
+	hashLo, hashHi uint64
+	Unloading      bool
+	Usp            [2]int // unloading starting pos
+}
 
 var (
 	Up    = Direction{0, 1}
@@ -15,7 +32,20 @@ var (
 	Left  = Direction{-1, 0}
 )
 
-var dirs = []Direction{Up, Right, Down, Left}
+var Opposite = map[Direction]Direction{
+	Up:    Down,
+	Down:  Up,
+	Right: Left,
+	Left:  Right,
+}
+
+var Dirs = []Direction{Up, Right, Down, Left}
+var DirIdx = map[Direction]int{
+	Up:    0,
+	Right: 1,
+	Down:  2,
+	Left:  3,
+}
 
 type Inventory struct {
 	Amount int
@@ -51,26 +81,6 @@ func (c *Colony) AddMember(offspring *Bot) {
 	c.Members[offspring] = struct{}{}
 }
 
-type Bot struct {
-	Dir        Direction
-	Genome     Genome
-	Inventory  Inventory
-	Colony     *Colony
-	Parent     *Bot
-	Offsprings map[*Bot]struct{}
-	Hp         int
-	Color      [3]float32
-	HasSpawner bool
-
-	hashLo, hashHi uint64
-	Unloading      bool
-	Usp            [2]int // unloading starting pos
-}
-
-func twoBitHash(g int) uint64 {
-	return uint64((g*0x9e3779b1)>>30) & 3
-}
-
 func NewColony(pos util.Position) Colony {
 	return Colony{
 		Center:  pos,
@@ -80,17 +90,18 @@ func NewColony(pos util.Position) Colony {
 
 func NewBot() Bot {
 	return Bot{
-		Dir:        RandomDir(),
-		Genome:     NewRandomGenome(),
-		Inventory:  NewEmptyInventory(),
-		Colony:     nil,
-		Parent:     nil,
-		Offsprings: make(map[*Bot]struct{}),
-		Hp:         botHp,
-		Color:      randomColor(),
-		HasSpawner: false,
-		Unloading:  false,
-		Usp:        [2]int{0, 0},
+		Dir:           RandomDir(),
+		Genome:        NewRandomGenome(),
+		Inventory:     NewEmptyInventory(),
+		Colony:        nil,
+		PathsToColony: 0,
+		Parent:        nil,
+		Offsprings:    make(map[*Bot]struct{}),
+		Hp:            botHp,
+		Color:         blueColor(),
+		HasSpawner:    false,
+		Unloading:     false,
+		Usp:           [2]int{0, 0},
 	}
 }
 
@@ -127,6 +138,7 @@ func (parent *Bot) NewChild() *Bot {
 	b.Genome = NewMutatedGenome(parent.Genome, doMutation)
 	b.Inventory = NewEmptyInventory()
 	b.Colony = parent.Colony
+
 	b.Parent = parent
 	if b.Offsprings == nil {
 		b.Offsprings = make(map[*Bot]struct{})
@@ -134,6 +146,7 @@ func (parent *Bot) NewChild() *Bot {
 	b.Hp = botHp
 	// b.Color = mutatedColor(parent.Color, doMutation)
 	b.Color = parent.Color
+	b.PathsToColony = parent.PathsToColony
 
 	parent.AddOffspring(b)
 	if parent.Colony != nil {
@@ -177,5 +190,5 @@ func NewEmptyInventory() Inventory {
 }
 
 func RandomDir() Direction {
-	return dirs[rand.Intn(4)]
+	return Dirs[rand.Intn(4)]
 }

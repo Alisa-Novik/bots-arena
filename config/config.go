@@ -65,14 +65,14 @@ func NewConfig() Config {
 		PoisonChance:     3,
 		NewGenThreshold:  5,
 		ChildrenByBot:    20,
-		DivisionCost:     10,
+		DivisionCost:     55,
 		DisableFarms:     false,
 		UseInitialGenome: false,
 
 		PhotoHpGain:          1,
-		OrganicInitialAmount: 5,
+		OrganicInitialAmount: 3,
 
-		ControllerInitialAmount: 1000,
+		ControllerInitialAmount: 10000,
 		ControllerHpGain:        1,
 		ControllerGrabHpGain:    15,
 		ControllerGrabCost:      1,
@@ -81,10 +81,10 @@ func NewConfig() Config {
 		ResourceGrabGain:   5,
 		ResourceGrabHpGain: 150,
 
-		BuildingGrabHpGain:  100,
+		BuildingGrabHpGain:  10,
 		BuildingGrabGain:    1,
 		BuildingBuildCost:   1,
-		BuildingBuildHpGain: 25,
+		BuildingBuildHpGain: 15,
 
 		FoodGrabHpGain:    250,
 		FarmGrabCost:      -1,

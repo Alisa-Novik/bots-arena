@@ -17,7 +17,6 @@ import (
 func init() { runtime.LockOSThread() }
 
 func main() {
-	// --- profiling setup ----------------------------------------------------
 	f, err := os.Create("cpu.out")
 	if err != nil {
 		panic(err)

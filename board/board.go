@@ -54,11 +54,17 @@ type Building struct {
 	Owner *bot.Bot
 	Hp    int
 }
+// type ColonyCell struct {
+// 	Bot         bot.Bot
+// 	Colony      bot.Colony
+// 	Connections [4]bool
+// }
 type Board struct {
-	grid     []Occupant
-	occupied []bool
-	dirty    []bool
-	patch    []int
+	grid        []Occupant
+	occupied    []bool
+	dirty       []bool
+	// colonyCells []ColonyCell
+	patch       []int
 }
 
 const (
@@ -115,9 +121,10 @@ func initNeighbourTable() {
 func NewBoard() *Board {
 	initNeighbourTable()
 	return &Board{
-		grid:     make([]Occupant, Rows*Cols),
-		occupied: make([]bool, (Rows+1)*(Cols+1)),
-		dirty:    make([]bool, Rows*Cols),
+		grid:        make([]Occupant, Rows*Cols),
+		occupied:    make([]bool, (Rows+1)*(Cols+1)),
+		dirty:       make([]bool, Rows*Cols),
+		// colonyCells: make([]ColonyCell, Rows*Cols),
 	}
 }
 

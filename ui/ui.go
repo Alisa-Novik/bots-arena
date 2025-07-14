@@ -478,8 +478,8 @@ func DrawGrid(brd *board.Board, bots []*bot.Bot) {
 
 	for idx, dirty := range brd.DirtyBitmap() {
 		if !dirty {
-			if runStart >= 0 { // end of a run
-				flushRun(runStart, prevIdx) // push it
+			if runStart >= 0 {
+				flushRun(runStart, prevIdx)
 				runStart = -1
 			}
 			continue
