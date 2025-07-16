@@ -71,7 +71,7 @@ func NewConfig() Config {
 	return Config{
 		ColoringStrategy:               DefaultColoring,
 		ShouldMutateColor:              true,
-		EnableResourceBasedColorChange: false,
+		EnableResourceBasedColorChange: true,
 
 		HpThreshold:      90,
 		ColorDelta:       float32(0.05),
@@ -106,7 +106,7 @@ func NewConfig() Config {
 		FarmGrabCost:      -1,
 		FarmBuildHpGain:   100,
 		FarmBuildCost:     1,
-		FarmInitialAmount: 0,
+		FarmInitialAmount: 1,
 
 		MineBuildCost:  1,
 		MineGrabGain:   30,

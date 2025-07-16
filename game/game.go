@@ -216,12 +216,6 @@ func (g *Game) step() {
 	}
 }
 
-func (g *Game) printDebugInfo() {
-	fmt.Printf("\nGeneration: %d; Max HP: %d;", g.currGen, g.maxHp)
-	fmt.Printf(" Latest improvement: %d;", g.latestImprovement)
-	fmt.Printf("\nBots amount: %d", g.liveBotCount())
-}
-
 func (g *Game) populateBoard() {
 	oldBoard := g.Board
 	g.Board = board.NewBoard()
@@ -264,10 +258,6 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, b)
 				continue
 			}
-			// if util.RollChanceOf(1000, g.config.PoisonChance) {
-			// 	g.Board.Set(pos, board.Food{Pos: pos, Amount: 1})
-			// 	continue
-			// }
 			if util.RollChanceOf(1000, g.config.PoisonChance) {
 				g.Board.Set(pos, board.Poison{Pos: pos})
 				continue
@@ -276,19 +266,11 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
 				continue
 			}
-			// if util.RollChance(g.config.ResourceChance) {
-			// 	g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
-			// 	continue
-			// }
 		}
 	}
 }
 
-var newGenerations = 0
-
 func (g *Game) initialBotsGeneration() {
-	fmt.Printf("initialBotsGeneration, %v\n", newGenerations)
-	newGenerations += 1
 	for r := range board.Rows {
 		for c := range board.Cols {
 			pos := board.Position{C: c, R: r}
@@ -394,7 +376,6 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(1)
 				continue
 			}
-			// fmt.Printf("I check if %v is bro. Is bro? %v\n", checkPos, b.IsBro(other))
 			if b.IsBro(other) || (other.ConnnectedToColony && b.SameColony(other)) {
 				b.PointerJumpBy(2)
 				continue

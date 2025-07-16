@@ -187,7 +187,7 @@ func Inside(p Position) bool {
 
 func (b *Board) firstEmptyAround(idx int) int {
 	start := rand.Intn(8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		n := neighbourIdx[idx][(start+i)&7]
 		if n >= 0 && !b.occupied[n] {
 			return n
