@@ -10,7 +10,19 @@ type GameState struct {
 	LastLogic time.Time
 }
 
+type ColoringStrategy int
+
+const (
+	ColonyConnectionColoring ColoringStrategy = iota
+	DefaultColoring
+	numColoringStrats
+)
+
 type Config struct {
+	ColoringStrategy               ColoringStrategy `json:"coloring"`
+	EnableResourceBasedColorChange bool             `json:"enableResourceBasedColorChange"`
+	ShouldMutateColor              bool             `json:"shouldMutateColor"`
+
 	HpThreshold      int     `json:"hpThreshold"`
 	ColorDelta       float32 `json:"colorDelta"`
 	MutationRate     int     `json:"mutationRate"`
@@ -57,6 +69,10 @@ type Config struct {
 
 func NewConfig() Config {
 	return Config{
+		ColoringStrategy:               DefaultColoring,
+		ShouldMutateColor:              true,
+		EnableResourceBasedColorChange: false,
+
 		HpThreshold:      90,
 		ColorDelta:       float32(0.05),
 		MutationRate:     1,
@@ -65,7 +81,7 @@ func NewConfig() Config {
 		PoisonChance:     3,
 		NewGenThreshold:  5,
 		ChildrenByBot:    20,
-		DivisionCost:     55,
+		DivisionCost:     25,
 		DisableFarms:     false,
 		UseInitialGenome: false,
 

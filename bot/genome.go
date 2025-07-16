@@ -64,6 +64,7 @@ const (
 	OpShareInventory
 	OpAttack
 	OpDivide
+	OpCheckConnection
 	OpCheckSignal
 	OpSendSignal
 	OpExecuteInstr
@@ -92,7 +93,7 @@ func (o Opcode) String() string {
 	return "OpJump/Unknown"
 }
 
-const genomeLen = 256
+const genomeLen = 64
 const genomeMaxValue = genomeLen - 1
 const mutationRate = 4
 const botHp = 100
@@ -198,8 +199,8 @@ func NewRandomGenome() Genome {
 	for i := range g.Matrix {
 		g.Matrix[i] = rand.Intn(genomeMaxValue)
 	}
-	// g.Matrix[0] = int(OpMove)
-	// g.Matrix[1] = int(OpGrab)
+	g.Matrix[0] = int(OpMove)
+	g.Matrix[1] = int(OpGrab)
 	// g.Matrix[2] = int(OpBuild)
 	// g.Matrix[2] = int(OpGrab)
 	// g.Matrix[3] = int(OpGrab)

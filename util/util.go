@@ -120,7 +120,3 @@ func FindPath(start, end Position, isEmpty func(Position) bool) []Position {
 	}
 	return nil
 }
-
-func GreenColor() [3]float32 {
-	return [3]float32{0, 1, 0}
-}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golab/board"
 	"golab/bot"
+	"golab/config"
 	conf "golab/config"
 	"golab/ui"
 	"golab/util"
@@ -53,6 +54,14 @@ func (g *Game) RunHeadless() {
 }
 
 func (g *Game) environmentActions() {
+	for _, b := range g.Bots {
+		if b != nil {
+			b.ConnnectedToColony = false
+			if g.config.ColoringStrategy == config.ColonyConnectionColoring {
+				b.Color = util.GreenColor()
+			}
+		}
+	}
 	for r := range board.Rows {
 		for c := range board.Cols {
 			pos := board.Position{C: c, R: r}
@@ -97,44 +106,49 @@ func (g *Game) killBot(b *bot.Bot, botIdx int) {
 	bot.BotPool.Put(b)
 }
 
-// TODO: subject to optimization
 func (g *Game) handleController(ctrl *board.Controller, pos util.Position, radius int) {
 	if ctrl.Owner == nil {
 		g.Board.Clear(pos)
 		return
 	}
-	for r := -radius; r <= radius; r++ {
-		for c := -radius; c <= radius; c++ {
-			botPos := pos.Add(r, c)
-			if botPos.R < 0 || botPos.R >= util.Rows {
-				continue
-			}
-			b := g.Bots[idx(botPos)]
-			if b == nil {
-				continue
-			}
-			b.PathsToColony = g.calcPathCount(botPos)
-			if b.PathsToColony == 0 {
-				b.Color = util.GreenColor()
-			}
-			if b.PathsToColony > 0 {
-				if b.Colony == ctrl.Colony {
-					b.Hp += 250
-				} else {
-					// b.Hp -= 50
-				}
-			} // if ctrl.Amount <= 0 && b.Inventory.Amount > 0 {
-			// 	ctrl.Amount++
-			// 	b.Inventory.Amount--
-			// }
+	visited := map[*bot.Bot]struct{}{}
+	for _, d := range bot.Dirs {
+		g.updateColonyConnectionMarker(pos.AddDir(d), visited, ctrl.Colony)
+	}
+
+	for m := range ctrl.Colony.Members {
+		if !m.ConnnectedToColony {
 			continue
-			// if b.Colony == ctrl.Colony {
-			// 	b.Hp += 25
-			// 	ctrl.Amount--
-			// } else {
-			// 	b.Hp -= 5
-			// }
 		}
+		if ctrl.Amount == 0 || m.Inventory.Amount > 0 {
+			ctrl.Amount++
+			m.Inventory.Amount--
+		}
+		m.Hp += 2
+	}
+}
+
+func (g *Game) updateColonyConnectionMarker(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) {
+	if util.OutOfBounds(currPos) {
+		return
+	}
+	b := g.GetBot(currPos)
+	if b == nil || b.Colony != colony {
+		return
+	}
+	if _, yes := visited[b]; yes {
+		return
+	}
+
+	b.ConnnectedToColony = true
+	if g.config.ColoringStrategy == config.ColonyConnectionColoring {
+		b.Color = util.RedColor()
+	}
+	visited[b] = struct{}{}
+
+	for _, d := range bot.Dirs {
+		nbPos := currPos.AddDir(d)
+		g.updateColonyConnectionMarker(nbPos, visited, colony)
 	}
 }
 
@@ -297,9 +311,8 @@ func (g *Game) botsActions() {
 			continue
 		}
 		pos := util.PosOf(i)
-		b.PathsToColony = g.calcPathCount(pos)
-		// b.Hp -= g.calcHpChange()
-		b.Hp -= 1
+		b.Hp -= g.calcHpChange()
+		// b.Hp -= 1
 		b.Hp = min(b.Hp, 500)
 		if b.Hp <= 0 {
 			g.killBot(b, i)
@@ -317,15 +330,15 @@ func (g *Game) botsActions() {
 func (g *Game) calcHpChange() int {
 	var hpChange int
 	if g.config.LiveBots > 20000 {
-		hpChange = 3
+		hpChange = 5
 	} else if g.config.LiveBots > 15000 {
-		hpChange = 2
+		hpChange = 3
 	} else if g.config.LiveBots > 10000 {
-		hpChange = 2
+		hpChange = 3
 	} else if g.config.LiveBots > 5000 {
-		hpChange = 1
+		hpChange = 3
 	} else if g.config.LiveBots > 3000 {
-		hpChange = 1
+		hpChange = 2
 	} else if g.config.LiveBots > 1000 {
 		hpChange = 1
 	} else {
@@ -341,7 +354,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		switch op {
 		case bot.OpDivide:
-			if b.Hp < 50 {
+			if b.Hp < 100 {
 				b.PointerJumpBy(5)
 				return
 			}
@@ -351,12 +364,22 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(4)
 				continue
 			}
-			child := b.NewChild()
-			child.PathsToColony = g.calcPathCount(newPos)
+			child := b.NewChild(g.config.ShouldMutateColor)
 			b.Hp -= g.config.DivisionCost
 			g.Bots[idx(newPos)] = child
 			g.Board.Set(newPos, child)
+			b.PointerJumpBy(6)
 			return
+
+		case bot.OpCheckConnection:
+			if b.ConnnectedToColony {
+				b.PointerJumpBy(1)
+				b.Genome.NextArg = 1
+			} else {
+				b.PointerJumpBy(2)
+				b.Genome.NextArg = 2
+			}
+			continue
 
 		case bot.OpMoveAbs:
 			b.Dir = util.PosClock[b.CmdArg(1)%8]
@@ -372,7 +395,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				continue
 			}
 			// fmt.Printf("I check if %v is bro. Is bro? %v\n", checkPos, b.IsBro(other))
-			if b.IsBro(other) {
+			if b.IsBro(other) || (other.ConnnectedToColony && b.SameColony(other)) {
 				b.PointerJumpBy(2)
 				continue
 			}
@@ -434,13 +457,12 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 					b.PointerJumpBy(1)
 					return
 				}
-				// fmt.Printf("I eat. Hp: %d; other.Hp: %d\n. Is bro? %v\n", b.Hp, other.Hp, b.IsBro(other))
 				b.Hp += other.Hp
-				// color := b.Color
-				//
-				// dc := g.config.ColorDelta
-				// b.Color = [3]float32{color[0] + dc, color[1] - dc, color[2] - dc}
-
+				if g.config.EnableResourceBasedColorChange {
+					color := b.Color
+					dc := g.config.ColorDelta
+					b.Color = [3]float32{color[0] + dc, color[1] - dc, color[2] - dc}
+				}
 				g.Board.Clear(eatPos)
 				g.killBot(other, idx(eatPos))
 			}
@@ -466,9 +488,11 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			if util.RollChance(photoChance) {
 				// b.Hp += g.config.PhotoHpGain
 				b.Hp += 1
-				// dc := g.config.ColorDelta
-				// color := b.Color
-				// b.Color = [3]float32{color[0] - dc, color[1] + dc, color[2] - dc}
+				if g.config.EnableResourceBasedColorChange {
+					dc := g.config.ColorDelta
+					color := b.Color
+					b.Color = [3]float32{color[0] - dc, color[1] + dc, color[2] - dc}
+				}
 			}
 			b.PointerJumpBy(1)
 			return
@@ -668,35 +692,20 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) board.Position {
 	g.Bots[idx(oldPos)] = nil
 	g.Bots[idx(newPos)] = b
 
-	b.PathsToColony = 0
-
-	g.Board.Clear(oldPos)
 	g.Board.Set(newPos, b)
+	g.Board.Clear(oldPos)
 
 	g.Board.MarkDirty(util.Idx(newPos))
 	g.Board.MarkDirty(util.Idx(oldPos))
 	return newPos
 }
 
-func (g *Game) botNb(pos util.Position, dir util.Direction) *bot.Bot {
+func (g *Game) botNb(pos util.Position, dir util.Direction) (*bot.Bot, util.Position) {
 	if util.OutOfBounds(pos) {
-		return nil
+		return nil, util.Position{}
 	}
-	nbIdx := idx(pos.AddDir(dir))
-	return g.Bots[nbIdx]
-}
-
-func (g *Game) calcPathCount(pos board.Position) int {
-	sum := 0
-	for _, d := range bot.Dirs {
-		if _, ok := g.Board.At(pos.AddDir(d)).(board.Controller); ok {
-			return 1
-		}
-		if nb := g.botNb(pos, d); nb != nil {
-			sum += nb.PathsToColony
-		}
-	}
-	return sum
+	botPos := pos.AddDir(dir)
+	return g.Bots[idx(botPos)], botPos
 }
 
 func (g *Game) grab(pos board.Position, b *bot.Bot) {
@@ -732,7 +741,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		if !found {
 			return
 		}
-		child := b.NewChild()
+		child := b.NewChild(g.config.ShouldMutateColor)
 		g.Board.Set(spawnPos, &child)
 		g.Bots[idx(spawnPos)] = child
 		b.PointerJumpBy(2)
@@ -858,13 +867,13 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		// b.HasSpawner = true
 		// b.PointerJumpBy(2)
 	case bot.BuildController:
-		if b.Colony != nil || b.PathsToColony != 0 {
+		if b.Colony != nil {
 			b.PointerJumpBy(6)
 			return
 		}
 
 		colony := bot.NewColony(buildPos)
-		// colony.AddFamily(b)
+		colony.AddFamily(b)
 
 		g.Board.Set(buildPos, board.Controller{
 			Pos:    buildPos,
@@ -872,8 +881,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 			Colony: &colony,
 			Amount: c.ControllerInitialAmount,
 		})
-		g.updateBotsPathsCounts(buildPos)
-		b.ReassignColor()
+		b.AssignRandomColor()
 		b.Hp += c.ControllerHpGain
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
@@ -914,54 +922,6 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 	}
 }
 
-func (g *Game) updateBotsPathsCounts(pos board.Position) {
-	if _, ok := g.Board.At(pos).(board.Controller); !ok {
-		panic("Controller expected.")
-	}
-
-	queue := util.Queue[board.Position]{}
-
-	for _, dir := range bot.Dirs {
-		botPos := pos.AddDir(dir)
-		if util.OutOfBounds(botPos) {
-			continue
-		}
-		neiBot := g.Bots[idx(botPos)]
-		if neiBot == nil {
-			continue
-		}
-		neiBot.PathsToColony = 1
-		queue.Enqueue(botPos)
-	}
-
-	visited := make(map[board.Position]struct{})
-
-	for !queue.Empty() {
-		currPos := queue.Dequeue()
-		currBot := g.Bots[idx(currPos)]
-		currBot.Color = [3]float32{1, 0, 0}
-
-		for _, dir := range bot.Dirs {
-			neiPos := currPos.AddDir(dir)
-			if util.OutOfBounds(neiPos) {
-				continue
-			}
-			b := g.GetBot(neiPos)
-			if b == nil {
-				continue
-			}
-
-			currBot.PathsToColony += b.PathsToColony
-
-			if _, ok := visited[neiPos]; ok {
-				continue
-			}
-			visited[neiPos] = struct{}{}
-			queue.Enqueue(neiPos)
-		}
-	}
-}
-
 func (g *Game) GetBot(pos util.Position) *bot.Bot {
 	return g.Bots[idx(pos)]
 }
@@ -975,13 +935,13 @@ func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 	case *bot.Bot:
 		other := g.Bots[idx(lookPos)]
 		if other != nil {
+			if b.IsBro(other) {
+				b.PointerJumpBy(20)
+				b.Genome.NextArg = 20
+				return
+			}
 			b.PointerJumpBy(13)
 			b.Genome.NextArg = 13
-			return
-		}
-		if b.IsBro(other) {
-			b.PointerJumpBy(20)
-			b.Genome.NextArg = 20
 			return
 		}
 	case board.Building:

@@ -9,16 +9,16 @@ import (
 type Direction = util.Direction
 
 type Bot struct {
-	Dir           Direction
-	Genome        Genome
-	Inventory     Inventory
-	Colony        *Colony
-	PathsToColony int
-	Parent        *Bot
-	Offsprings    map[*Bot]struct{}
-	Hp            int
-	Color         [3]float32
-	HasSpawner    bool
+	Dir                Direction
+	Genome             Genome
+	Inventory          Inventory
+	Colony             *Colony
+	ConnnectedToColony bool
+	Parent             *Bot
+	Offsprings         map[*Bot]struct{}
+	Hp                 int
+	Color              [3]float32
+	HasSpawner         bool
 
 	hashLo, hashHi uint64
 	Unloading      bool
@@ -90,42 +90,30 @@ func NewColony(pos util.Position) Colony {
 
 func NewBot() Bot {
 	return Bot{
-		Dir:           RandomDir(),
-		Genome:        NewRandomGenome(),
-		Inventory:     NewEmptyInventory(),
-		Colony:        nil,
-		PathsToColony: 0,
-		Parent:        nil,
-		Offsprings:    make(map[*Bot]struct{}),
-		Hp:            botHp,
-		Color:         blueColor(),
-		HasSpawner:    false,
-		Unloading:     false,
-		Usp:           [2]int{0, 0},
+		Dir:                RandomDir(),
+		Genome:             NewRandomGenome(),
+		Inventory:          NewEmptyInventory(),
+		Colony:             nil,
+		ConnnectedToColony: false,
+		Parent:             nil,
+		Offsprings:         make(map[*Bot]struct{}),
+		Hp:                 botHp,
+		Color:              util.RandomColor(),
+		HasSpawner:         false,
+		Unloading:          false,
+		Usp:                [2]int{0, 0},
 	}
 }
 
-func (b *Bot) ReassignColor() {
-	b.Color = [3]float32{rand.Float32(), rand.Float32(), rand.Float32()}
-}
-
-func randomColor() [3]float32 {
-	return [3]float32{rand.Float32(), rand.Float32(), rand.Float32()}
-}
-
-func blueColor() [3]float32 {
-	return [3]float32{0, 0, 1}
-}
-
-func redColor() [3]float32 {
-	return [3]float32{1, 0, 0}
+func (b *Bot) AssignRandomColor() {
+	b.Color = util.RandomColor()
 }
 
 var BotPool = sync.Pool{
 	New: func() any { return new(Bot) },
 }
 
-func (parent *Bot) NewChild() *Bot {
+func (parent *Bot) NewChild(shouldMutateColor bool) *Bot {
 	if rand.Intn(1000) < 5 {
 		return BotPool.Get().(*Bot)
 	}
@@ -144,9 +132,14 @@ func (parent *Bot) NewChild() *Bot {
 		b.Offsprings = make(map[*Bot]struct{})
 	}
 	b.Hp = botHp
-	// b.Color = mutatedColor(parent.Color, doMutation)
-	b.Color = parent.Color
-	b.PathsToColony = parent.PathsToColony
+
+	if shouldMutateColor && doMutation {
+		b.Color = mutatedColor(parent.Color, doMutation)
+	} else {
+		b.Color = parent.Color
+	}
+
+	b.ConnnectedToColony = false
 
 	parent.AddOffspring(b)
 	if parent.Colony != nil {
@@ -170,10 +163,10 @@ func mutatedColor(f [3]float32, doMutation bool) [3]float32 {
 	if !doMutation {
 		return f
 	}
-	const mutationStrength = 0.1
+	const mutationStrength = 0.05
 	var newColor [3]float32
 	for i := range 3 {
-		delta := (rand.Float32()*2 - 1) * mutationStrength // [-0.1, +0.1]
+		delta := (rand.Float32()*2 - 1) * mutationStrength
 		v := f[i] + delta
 		if v < 0 {
 			v = 0
