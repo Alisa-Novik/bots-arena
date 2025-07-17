@@ -43,6 +43,7 @@ var (
 	uvLight   = [4]float32{7 * tile, 0, 8 * tile, 1}
 	uvBot     = [4]float32{8 * tile, 0, 9 * tile, 1}
 	uvDark    = [4]float32{9 * tile, 0, 10 * tile, 1}
+	uvFlag    = [4]float32{10 * tile, 0, 11 * tile, 1}
 )
 
 var (
@@ -69,7 +70,7 @@ var (
 var drawShark = true
 var Font *gltext.Font
 
-const tile = 1.0 / 10.0
+const tile = 1.0 / 11.0
 
 type v = struct{ x, y, u, v, r, g, b, a float32 }
 
@@ -426,6 +427,8 @@ func pickSprite(o board.Occupant) (color [3]float32, uv [4]float32) {
 		return clrLight, uvFarm
 	case board.Poison:
 		return clrLight, uvPoison
+	case bot.ColonyFlag:
+		return clrLight, uvFlag
 	case nil:
 		return clrDefault, uvEmpty
 	default:

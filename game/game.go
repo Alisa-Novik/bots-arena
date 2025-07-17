@@ -75,7 +75,7 @@ func (g *Game) environmentActions() {
 				g.Board.Set(pos, v)
 				continue
 			case board.Controller:
-				g.handleController(&v, pos, 10)
+				g.handleController(&v, pos)
 				g.Board.Set(pos, v)
 			case board.Farm:
 				if v.Amount <= 0 {
@@ -106,29 +106,69 @@ func (g *Game) killBot(b *bot.Bot, botIdx int) {
 	bot.BotPool.Put(b)
 }
 
-func (g *Game) handleController(ctrl *board.Controller, pos util.Position, radius int) {
+func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 	if ctrl.Owner == nil {
+		for m := range ctrl.Colony.Members {
+			if !m.ConnnectedToColony {
+				continue
+			}
+		}
+		for _, f := range ctrl.Colony.Flags {
+			g.Board.Clear(f.Pos)
+		}
 		g.Board.Clear(pos)
 		return
 	}
-	visited := map[*bot.Bot]struct{}{}
+
 	for _, d := range bot.Dirs {
-		g.updateColonyConnectionMarker(pos.AddDir(d), visited, ctrl.Colony)
+		g.connectBots(pos.AddDir(d), map[*bot.Bot]struct{}{}, ctrl.Colony)
 	}
+
+	radius := 5
+	for _, f := range ctrl.Colony.Flags {
+		for r := -radius; r <= radius; r++ {
+			for c := -radius; c <= radius; c++ {
+				flagBot := g.GetBot(f.Pos.Add(r, c))
+				if flagBot == nil {
+					continue
+				}
+				flagBot.Hp += g.calcHpChange()
+			}
+		}
+	}
+
+	colony := ctrl.Colony
+
+	if !colony.HasWater && !colony.HasTask(bot.FindWater) {
+		task := colony.NewTask(bot.FindWater, nil)
+		colony.AddTask(task)
+	}
+
+	// for _, marker := range ctrl.Colony.Markers {
+	// }
 
 	for m := range ctrl.Colony.Members {
 		if !m.ConnnectedToColony {
 			continue
 		}
-		if ctrl.Amount == 0 || m.Inventory.Amount > 0 {
+		if ctrl.Amount == 0 && m.Inventory.Amount > 0 {
 			ctrl.Amount++
 			m.Inventory.Amount--
 		}
-		m.Hp += 2
+		if m.Inventory.Amount > 0 {
+			m.Hp += 5
+		} else {
+			m.Hp += 2
+		}
 	}
+	if ctrl.Amount > 0 {
+		ctrl.Amount--
+	}
+
+	// fmt.Println(ctrl.Amount)
 }
 
-func (g *Game) updateColonyConnectionMarker(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) {
+func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) {
 	if util.OutOfBounds(currPos) {
 		return
 	}
@@ -147,12 +187,12 @@ func (g *Game) updateColonyConnectionMarker(currPos util.Position, visited map[*
 	visited[b] = struct{}{}
 
 	for _, d := range bot.Dirs {
-		nbPos := currPos.AddDir(d)
-		g.updateColonyConnectionMarker(nbPos, visited, colony)
+		g.connectBots(currPos.AddDir(d), visited, colony)
 	}
 }
 
 func (g *Game) Run() {
+	fmt.Println("Running simulation...")
 	g.initialBotsGeneration()
 	g.generateWater()
 	g.populateBoard()
@@ -169,8 +209,8 @@ func (g *Game) Run() {
 }
 
 func (g *Game) generateWater() {
-	waterSpread := 3 * util.ScaleFactor
-	for range waterSpread {
+	waterSpread := 30 * util.ScaleFactor
+	for i := range waterSpread {
 		center := board.NewRandomPosition()
 		radius := 1 + rand.Intn(4)
 		for dr := -radius; dr <= radius; dr++ {
@@ -180,7 +220,7 @@ func (g *Game) generateWater() {
 				}
 				pos := center.Add(dc, dr)
 				if !g.Board.IsWall(pos) {
-					g.Board.Set(pos, board.Water{})
+					g.Board.Set(pos, board.Water{GroupId: i})
 				}
 			}
 		}
@@ -390,7 +430,6 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(1)
 				continue
 			}
-			// fmt.Printf("I check if %v is bro. Is bro? %v\n", checkPos, b.IsBro(other))
 			if b.SameColony(other) {
 				b.PointerJumpBy(2)
 				continue
@@ -835,7 +874,21 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(1)
 		b.Genome.NextArg = 1
 		return
+	case bot.BuildColonyFlag:
+		if b.Colony == nil || !b.ConnnectedToColony || b.Colony.FlagsCount() >= 3 {
+			b.PointerJumpBy(2)
+			return
+		}
+		flag := bot.ColonyFlag{
+			Pos:    buildPos,
+			Colony: b.Colony,
+		}
+		g.Board.Set(buildPos, flag)
+		b.Colony.AddFlag(&flag)
+		b.PointerJumpBy(1)
+		return
 	case bot.BuildSpawner:
+		b.PointerJumpBy(2)
 		return
 		// if b.HasSpawner {
 		// 	return
@@ -904,15 +957,15 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 }
 
 func (g *Game) GetBot(pos util.Position) *bot.Bot {
+	if !board.Inside(pos) {
+		return nil
+	}
 	return g.Bots[idx(pos)]
 }
 
 func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
-	dir := util.PosClock[b.CmdArg(1)%8]
-	lookPos := botPos.Add(dir[0], dir[1])
-	// reg := b.CmdArg(2) % 4
-	// b.Registers[reg] = 0
-	switch g.Board.At(lookPos).(type) {
+	lookPos := b.CmdArgDir(2, botPos)
+	switch v := g.Board.At(lookPos).(type) {
 	case *bot.Bot:
 		other := g.Bots[idx(lookPos)]
 		if other != nil {
@@ -950,22 +1003,20 @@ func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(14)
 		b.Genome.NextArg = 14
 	case board.Water:
-		b.PointerJumpBy(15)
+		if b.Colony != nil && !b.Colony.KnowsWaterGroupId(v.GroupId) {
+			b.Colony.AddWaterPosition(lookPos, v.GroupId)
+		}
+		// if b.Colony != nil {
+		// 	marker := b.Colony.NewMarker(lookPos, bot.WaterMarker)
+		// 	b.Colony.AddMarker(marker)
+		// }
 		b.Genome.NextArg = 15
+		b.PointerJumpBy(15)
 	case board.Organics:
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
 	default:
 		b.PointerJumpBy(12)
 		b.Genome.NextArg = 12
-	}
-
-	log := false
-	if log && g.Board.At(lookPos) != nil {
-		nextOp := bot.Opcode(b.Genome.Matrix[b.Genome.Pointer])
-		fmt.Printf("I am at %v ", botPos)
-		fmt.Printf("I look at %v ", lookPos)
-		fmt.Printf("; I see %T; ", g.Board.At(lookPos))
-		fmt.Printf("My next action is %v\n", nextOp.String())
 	}
 }

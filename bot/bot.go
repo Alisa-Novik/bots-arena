@@ -3,6 +3,7 @@ package bot
 import (
 	"golab/util"
 	"math/rand"
+	"slices"
 	"sync"
 )
 
@@ -59,9 +60,103 @@ func (parent *Bot) RemoveOffspring(offspring *Bot) {
 	delete(parent.Offsprings, offspring)
 }
 
+type ColonyMarkerType int
+
+const (
+	ResourceMarker ColonyMarkerType = iota
+	WaterMarker
+)
+
+type ColonyMarker struct {
+	Colony *Colony
+	Pos    util.Position
+	Type   ColonyMarkerType
+}
+
+type ColonyTaskType int
+
+const (
+	FindWater ColonyTaskType = iota
+)
+
+type ColonyTask struct {
+	Colony *Colony
+	Type   ColonyTaskType
+	Owner  *Bot
+}
+
+type ColonyFlag struct {
+	Colony *Colony
+	Pos    util.Position
+}
+
 type Colony struct {
-	Center  util.Position
-	Members map[*Bot]struct{}
+	Center   util.Position
+	Members  map[*Bot]struct{}
+	HasWater bool
+	Flags    []*ColonyFlag
+	Markers  []*ColonyMarker
+	Tasks    []*ColonyTask
+
+	WaterPositions []util.Position
+	WaterGroupIds  []int
+}
+
+func NewColony(pos util.Position) Colony {
+	return Colony{
+		Center:   pos,
+		HasWater: false,
+		Members:  make(map[*Bot]struct{}),
+
+		// WaterPositions: make([]util.Position, 10),
+		// WaterGroupIds:  make([]int, 10),
+	}
+}
+
+func (c *Colony) HasTask(taskType ColonyTaskType) bool {
+	for _, task := range c.Tasks {
+		if task.Type == FindWater {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Colony) NewTask(taskType ColonyTaskType, owner *Bot) *ColonyTask {
+	return &ColonyTask{
+		Colony: c,
+		Type:   taskType,
+		Owner:  owner,
+	}
+}
+
+func (c *Colony) NewMarker(pos util.Position, markerType ColonyMarkerType) *ColonyMarker {
+	return &ColonyMarker{
+		Pos:    pos,
+		Type:   markerType,
+		Colony: c,
+	}
+}
+
+func (c *Colony) KnowsWaterGroupId(groupId int) bool {
+	return slices.Contains(c.WaterGroupIds, groupId)
+}
+
+func (c *Colony) AddWaterPosition(pos util.Position, groupId int) {
+	c.WaterPositions = append(c.WaterPositions, pos)
+	c.WaterGroupIds = append(c.WaterGroupIds, groupId)
+}
+
+func (c *Colony) AddTask(task *ColonyTask) {
+	c.Tasks = append(c.Tasks, task)
+}
+
+func (c *Colony) AddMarker(marker *ColonyMarker) {
+	c.Markers = append(c.Markers, marker)
+}
+
+func (c *Colony) AddFlag(flag *ColonyFlag) {
+	c.Flags = append(c.Flags, flag)
 }
 
 func (c *Colony) AddFamily(b *Bot) {
@@ -81,11 +176,8 @@ func (c *Colony) AddMember(offspring *Bot) {
 	c.Members[offspring] = struct{}{}
 }
 
-func NewColony(pos util.Position) Colony {
-	return Colony{
-		Center:  pos,
-		Members: make(map[*Bot]struct{}),
-	}
+func (c *Colony) FlagsCount() int {
+	return len(c.Flags)
 }
 
 func NewBot() Bot {

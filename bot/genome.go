@@ -17,6 +17,7 @@ const (
 	BuildController
 	BuildBuilding
 	BuildMine
+	BuildColonyFlag
 	numBuildTypes
 )
 
@@ -126,10 +127,8 @@ func (b *Bot) CmdArg(i int) int {
 
 func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
 	dir := util.PosClock[b.CmdArg(1)%8]
-	return pos.Add(dir[0], dir[1])
+	return pos.AddDir(dir)
 }
-
-const maxDifferences = 3
 
 func (b *Bot) IsOffspring(parent *Bot) bool {
 	if b == parent {
@@ -152,18 +151,11 @@ func (b *Bot) SameColony(other *Bot) bool {
 }
 
 func (b *Bot) IsBro(other *Bot) bool {
-	// diff := bits.OnesCount64(b.hashLo^other.hashLo) +
-	// 	bits.OnesCount64(b.hashHi^other.hashHi)
-	// if diff > maxDifferences*2 {
-	// 	return false
-	// }
-
-	// fall back to exact check (very rare)
 	differences := 0
 	for i := range b.Genome.Matrix {
 		if b.Genome.Matrix[i] != other.Genome.Matrix[i] {
 			differences++
-			if differences > maxDifferences {
+			if differences > mutationRate {
 				return false
 			}
 		}
