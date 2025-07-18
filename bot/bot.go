@@ -19,6 +19,7 @@ type Bot struct {
 	Offsprings         map[*Bot]struct{}
 	Hp                 int
 	Color              [3]float32
+	PrevColor          [3]float32
 	HasSpawner         bool
 	Pos                util.Position
 
@@ -194,6 +195,7 @@ func (c *Colony) FlagsCount() int {
 }
 
 func NewBot(pos util.Position) Bot {
+	color := util.RandomColor()
 	return Bot{
 		Dir:                RandomDir(),
 		Pos:                pos,
@@ -204,7 +206,8 @@ func NewBot(pos util.Position) Bot {
 		Parent:             nil,
 		Offsprings:         make(map[*Bot]struct{}),
 		Hp:                 botHp,
-		Color:              util.RandomColor(),
+		Color:              color,
+		PrevColor:          color,
 		HasSpawner:         false,
 		Unloading:          false,
 		Usp:                [2]int{0, 0},
@@ -245,6 +248,7 @@ func (parent *Bot) NewChild(pos util.Position, shouldMutateColor bool) *Bot {
 	} else {
 		b.Color = parent.Color
 	}
+	b.PrevColor = b.Color
 
 	b.ConnnectedToColony = false
 

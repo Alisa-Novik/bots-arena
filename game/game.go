@@ -159,26 +159,26 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 		colony.AddTask(task)
 	}
 
-	for i := 0; i < len(colony.Tasks); {
-		t := ctrl.Colony.Tasks[i]
-		if t.Type == bot.ConnectToPos {
-			if len(colony.PathToWater) != 0 {
-				continue
-			}
-			closest := SortByDistance(colony.Members, t.Pos)
-			limit := min(len(closest), 20)
-			for _, m := range closest[:limit] {
-				m.Color = util.RedColor()
-			}
-			colony.PathToWater = g.findPath()
-			if len(colony.PathToWater) == 0 {
-				continue
-			}
-			colony.Tasks = append(ctrl.Colony.Tasks[:i], ctrl.Colony.Tasks[i+1:]...)
-		} else {
-			i++
-		}
-	}
+	// for i := 0; i < len(colony.Tasks); {
+	// 	t := ctrl.Colony.Tasks[i]
+	// 	if t.Type == bot.ConnectToPos {
+	// 		if len(colony.PathToWater) != 0 {
+	// 			continue
+	// 		}
+	// 		closest := SortByDistance(colony.Members, t.Pos)
+	// 		limit := min(len(closest), 20)
+	// 		for _, m := range closest[:limit] {
+	// 			m.Color = util.RedColor()
+	// 		}
+	// 		colony.PathToWater = g.findPath()
+	// 		if len(colony.PathToWater) == 0 {
+	// 			continue
+	// 		}
+	// 		colony.Tasks = append(ctrl.Colony.Tasks[:i], ctrl.Colony.Tasks[i+1:]...)
+	// 	} else {
+	// 		i++
+	// 	}
+	// }
 
 	for m := range ctrl.Colony.Members {
 		if !m.ConnnectedToColony {
@@ -205,16 +205,16 @@ func (g *Game) findPath() []util.Position {
 	panic("unimplemented")
 }
 
-func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) {
+func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) bool {
 	if util.OutOfBounds(currPos) {
-		return
+		return false
 	}
 	b := g.GetBot(currPos)
 	if b == nil || b.Colony != colony {
-		return
+		return false
 	}
 	if _, yes := visited[b]; yes {
-		return
+		return true
 	}
 
 	b.ConnnectedToColony = true
@@ -223,9 +223,18 @@ func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{},
 	}
 	visited[b] = struct{}{}
 
+	isOnBorder := false
 	for _, d := range bot.Dirs {
-		g.connectBots(currPos.AddDir(d), visited, colony)
+		if !g.connectBots(currPos.AddDir(d), visited, colony) {
+			isOnBorder = true
+		}
 	}
+	if isOnBorder {
+		b.Color = util.YellowColor()
+	} else {
+		b.Color = util.RedColor()
+	}
+	return true
 }
 
 func (g *Game) Run() {
@@ -246,7 +255,7 @@ func (g *Game) Run() {
 }
 
 func (g *Game) generateWater() {
-	waterSpread := 30 * util.ScaleFactor
+	waterSpread := g.config.OceansCount * util.ScaleFactor
 	for i := range waterSpread {
 		center := board.NewRandomPosition()
 		radius := 1 + rand.Intn(4)
@@ -373,6 +382,17 @@ func (g *Game) botsActions() {
 		b.Hp -= g.calcHpChange()
 		// b.Hp -= 1
 		b.Hp = min(b.Hp, 500)
+		// if b.Colony != nil && b.Hp > 80 {
+		// 	//TODO: fix
+		// 	newPos, ok := g.Board.FindEmptyPosAround(pos)
+		// 	if !ok {
+		// 		return
+		// 	}
+		// 	child := b.NewChild(newPos, g.config.ShouldMutateColor)
+		// 	b.Hp -= g.config.DivisionCost
+		// 	g.Bots[idx(newPos)] = child
+		// 	g.Board.Set(newPos, child)
+		// }
 		if b.Hp <= 0 {
 			g.killBot(b, i)
 			if rand.Intn(100) < 33 {

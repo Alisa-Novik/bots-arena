@@ -24,6 +24,7 @@ type Config struct {
 	ShouldMutateColor              bool             `json:"shouldMutateColor"`
 
 	HpThreshold      int     `json:"hpThreshold"`
+	OceansCount      int     `json:"oceansCount"`
 	ColorDelta       float32 `json:"colorDelta"`
 	MutationRate     int     `json:"mutationRate"`
 	BotChance        int     `json:"botChance"`
@@ -74,6 +75,7 @@ func NewConfig() Config {
 		EnableResourceBasedColorChange: true,
 
 		HpThreshold:      90,
+		OceansCount:      15,
 		ColorDelta:       float32(0.05),
 		MutationRate:     1,
 		BotChance:        5,
