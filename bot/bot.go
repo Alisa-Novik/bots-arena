@@ -95,14 +95,14 @@ type ColonyFlag struct {
 }
 
 type Colony struct {
-	Center      util.Position
-	Members     map[*Bot]struct{}
-	HasWater    bool
-	Flags       []*ColonyFlag
-	Markers     []*ColonyMarker
-	Tasks       []*ColonyTask
-	PathToWater []util.Position
-
+	Center         util.Position
+	Members        map[*Bot]struct{}
+	HasWater       bool
+	Flags          []*ColonyFlag
+	Markers        []*ColonyMarker
+	Tasks          []*ColonyTask
+	Color          [3]float32
+	PathToWater    []util.Position
 	WaterPositions []util.Position
 	WaterGroupIds  []int
 }
@@ -111,7 +111,9 @@ func NewColony(pos util.Position) Colony {
 	return Colony{
 		Center:   pos,
 		HasWater: false,
-		Members:  make(map[*Bot]struct{}),
+		// Color:    util.RandomColor(),
+		Color:   util.RedColor(),
+		Members: make(map[*Bot]struct{}),
 
 		// WaterPositions: make([]util.Position, 10),
 		// WaterGroupIds:  make([]int, 10),

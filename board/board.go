@@ -56,6 +56,8 @@ type Building struct {
 	Hp    int
 }
 type Board struct {
+	PathsToRender []util.Position
+
 	grid     []Occupant
 	occupied []bool
 	dirty    []bool

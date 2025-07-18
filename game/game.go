@@ -22,6 +22,7 @@ type Game struct {
 	config        *conf.Config
 	State         *conf.GameState
 
+	// aux
 	maxHp             int
 	currGen           int
 	latestImprovement int
@@ -154,31 +155,41 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 
 	colony := ctrl.Colony
 
-	if !colony.HasWater && len(colony.WaterPositions) > 0 && !colony.HasTask(bot.ConnectToPos) {
+	if !colony.HasWater && len(colony.WaterPositions) > 0 && !colony.HasTask(bot.ConnectToPos) && len(colony.PathToWater) == 0 {
 		task := colony.NewConnectionTask(colony.WaterPositions[0], nil)
 		colony.AddTask(task)
 	}
 
-	// for i := 0; i < len(colony.Tasks); {
-	// 	t := ctrl.Colony.Tasks[i]
-	// 	if t.Type == bot.ConnectToPos {
-	// 		if len(colony.PathToWater) != 0 {
-	// 			continue
-	// 		}
-	// 		closest := SortByDistance(colony.Members, t.Pos)
-	// 		limit := min(len(closest), 20)
-	// 		for _, m := range closest[:limit] {
-	// 			m.Color = util.RedColor()
-	// 		}
-	// 		colony.PathToWater = g.findPath()
-	// 		if len(colony.PathToWater) == 0 {
-	// 			continue
-	// 		}
-	// 		colony.Tasks = append(ctrl.Colony.Tasks[:i], ctrl.Colony.Tasks[i+1:]...)
-	// 	} else {
-	// 		i++
-	// 	}
-	// }
+	for i := 0; i < len(colony.Tasks); {
+		task := ctrl.Colony.Tasks[i]
+		if task.Type == bot.ConnectToPos {
+			if len(colony.PathToWater) != 0 {
+				i++
+				continue
+			}
+			closestBots := SortByDistance(colony.Members, task.Pos)
+			// closestBot := closestBots[len(closestBots)-1]
+			closestBot := closestBots[len(closestBots)-1]
+			limit := min(len(closestBots), 20)
+			for _, m := range closestBots[:limit] {
+				m.Color = util.PinkColor()
+			}
+			if len(closestBots) == 0 {
+				panic("sorted bots are len 0")
+			}
+			colony.PathToWater = util.FindPath(closestBot.Pos, task.Pos, g.Board.IsEmpty)
+			if len(colony.PathToWater) != 0 {
+				// fmt.Printf("closestBot Pos %v, taskPos %v, path %v\n", closestBots[len(closestBots)-1].Pos, task.Pos, colony.PathToWater)
+			}
+			for _, pathPos := range colony.PathToWater {
+				g.Board.MarkDirty(idx(pathPos))
+				g.Board.PathsToRender = append(g.Board.PathsToRender, pathPos)
+			}
+			colony.Tasks = append(ctrl.Colony.Tasks[:i], ctrl.Colony.Tasks[i+1:]...)
+		} else {
+			i++
+		}
+	}
 
 	for m := range ctrl.Colony.Members {
 		if !m.ConnnectedToColony {
@@ -189,9 +200,9 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 			m.Inventory.Amount--
 		}
 		if m.Inventory.Amount > 0 {
-			m.Hp += 15
+			m.Hp += 8
 		} else {
-			m.Hp += 12
+			m.Hp += 5
 		}
 	}
 	if ctrl.Amount > 0 {
@@ -199,10 +210,6 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 	}
 
 	// fmt.Println(ctrl.Amount)
-}
-
-func (g *Game) findPath() []util.Position {
-	panic("unimplemented")
 }
 
 func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) bool {
@@ -232,7 +239,7 @@ func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{},
 	if isOnBorder {
 		b.Color = util.YellowColor()
 	} else {
-		b.Color = util.RedColor()
+		b.Color = b.Colony.Color
 	}
 	return true
 }
@@ -382,17 +389,6 @@ func (g *Game) botsActions() {
 		b.Hp -= g.calcHpChange()
 		// b.Hp -= 1
 		b.Hp = min(b.Hp, 500)
-		// if b.Colony != nil && b.Hp > 80 {
-		// 	//TODO: fix
-		// 	newPos, ok := g.Board.FindEmptyPosAround(pos)
-		// 	if !ok {
-		// 		return
-		// 	}
-		// 	child := b.NewChild(newPos, g.config.ShouldMutateColor)
-		// 	b.Hp -= g.config.DivisionCost
-		// 	g.Bots[idx(newPos)] = child
-		// 	g.Board.Set(newPos, child)
-		// }
 		if b.Hp <= 0 {
 			g.killBot(b, i)
 			if rand.Intn(100) < 33 {
@@ -433,7 +429,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 
 		switch op {
 		case bot.OpDivide:
-			if b.Hp < 100 {
+			if b.Hp < g.config.DivisionMinHp {
 				b.PointerJumpBy(5)
 				return
 			}

@@ -5,8 +5,10 @@ import (
 	"golab/board"
 	"golab/bot"
 	"golab/config"
+	"golab/util"
 	"image"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/go-gl/gl/v2.1/gl"
@@ -491,6 +493,9 @@ func DrawGrid(brd *board.Board, bots []*bot.Bot) {
 		// -------- tile idx IS dirty --------
 		p := Position{R: idx / board.Cols, C: idx % board.Cols}
 		col, uv := pickSprite(brd.At(p))
+		if slices.Contains(brd.PathsToRender, p) {
+			col, uv = util.GreenColor(), uvEmpty
+		}
 		base := idx * vPerQuad
 		writeQuad(vertsDyn, base, p, col, uv)
 		if base+vPerQuad > dynVertCount {

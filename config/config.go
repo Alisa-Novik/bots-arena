@@ -33,6 +33,7 @@ type Config struct {
 	NewGenThreshold  int     `json:"newGenThreshold"`
 	ChildrenByBot    int     `json:"childrenByBot"`
 	DivisionCost     int     `json:"divisionCost"`
+	DivisionMinHp    int     `json:"divisionMinHp"`
 	DisableFarms     bool    `json:"disableFarms"`
 	UseInitialGenome bool    `json:"useInitialGenome"`
 
@@ -84,6 +85,7 @@ func NewConfig() Config {
 		NewGenThreshold:  5,
 		ChildrenByBot:    20,
 		DivisionCost:     25,
+		DivisionMinHp:    95,
 		DisableFarms:     false,
 		UseInitialGenome: false,
 

@@ -82,47 +82,43 @@ func RollChance(percent int) bool {
 	return rand.Intn(100) < percent
 }
 
+var PosCross = [8][2]int{
+	{0, 1}, {1, 0}, {0, -1}, {-1, 0},
+}
+
 var PosClock = [8][2]int{
 	{0, 1}, {1, 1}, {1, 0}, {1, -1},
 	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
 }
 
-func FindPath(start, end Position, isEmpty func(Position) bool) []Position {
+func FindPath(start, end Position, passable func(Position) bool) []Position {
 	if start == end {
 		return nil
 	}
 
-	type Node struct {
-		Pos  Position
-		Prev *Node
-	}
-
-	visited := make(map[Position]bool)
-	queue := []Node{{Pos: start}}
+	prev := make(map[Position]Position)
+	visited := make(map[Position]struct{})
+	queue := []Position{start}
+	visited[start] = struct{}{}
 
 	for len(queue) > 0 {
 		curr := queue[0]
 		queue = queue[1:]
-
-		if curr.Pos == end {
-			var path []Position
-			for n := &curr; n != nil; n = n.Prev {
-				path = append([]Position{n.Pos}, path...)
-			}
-			return path[1:]
-		}
-
-		if visited[curr.Pos] {
-			continue
-		}
-		visited[curr.Pos] = true
-
-		for _, dir := range PosClock {
-			next := curr.Pos.Add(dir[0], dir[1])
-			if !isEmpty(next) || visited[next] {
+		for _, d := range PosCross {
+			next := curr.Add(d[0], d[1])
+			if _, seen := visited[next]; seen || (!passable(next) && next != end) {
 				continue
 			}
-			queue = append(queue, Node{Pos: next, Prev: &curr})
+			prev[next] = curr
+			if next == end {
+				var path []Position
+				for p := end; p != start; p = prev[p] {
+					path = append([]Position{p}, path...)
+				}
+				return path
+			}
+			visited[next] = struct{}{}
+			queue = append(queue, next)
 		}
 	}
 	return nil
