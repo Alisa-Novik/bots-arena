@@ -1,6 +1,7 @@
 package game
 
 import (
+	"cmp"
 	"fmt"
 	"golab/board"
 	"golab/bot"
@@ -9,6 +10,7 @@ import (
 	"golab/ui"
 	"golab/util"
 	"math/rand"
+	"slices"
 	"time"
 )
 
@@ -106,6 +108,19 @@ func (g *Game) killBot(b *bot.Bot, botIdx int) {
 	bot.BotPool.Put(b)
 }
 
+func SortByDistance(members map[*bot.Bot]struct{}, target util.Position) []*bot.Bot {
+	bots := make([]*bot.Bot, 0, len(members))
+	for bot := range members {
+		bots = append(bots, bot)
+	}
+
+	slices.SortFunc(bots, func(a, b *bot.Bot) int {
+		return cmp.Compare(util.CalcDistance(a.Pos, target), util.CalcDistance(b.Pos, target))
+	})
+
+	return bots
+}
+
 func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 	if ctrl.Owner == nil {
 		for m := range ctrl.Colony.Members {
@@ -139,13 +154,31 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 
 	colony := ctrl.Colony
 
-	if !colony.HasWater && !colony.HasTask(bot.FindWater) {
-		task := colony.NewTask(bot.FindWater, nil)
+	if !colony.HasWater && len(colony.WaterPositions) > 0 && !colony.HasTask(bot.ConnectToPos) {
+		task := colony.NewConnectionTask(colony.WaterPositions[0], nil)
 		colony.AddTask(task)
 	}
 
-	// for _, marker := range ctrl.Colony.Markers {
-	// }
+	for i := 0; i < len(colony.Tasks); {
+		t := ctrl.Colony.Tasks[i]
+		if t.Type == bot.ConnectToPos {
+			if len(colony.PathToWater) != 0 {
+				continue
+			}
+			closest := SortByDistance(colony.Members, t.Pos)
+			limit := min(len(closest), 20)
+			for _, m := range closest[:limit] {
+				m.Color = util.RedColor()
+			}
+			colony.PathToWater = g.findPath()
+			if len(colony.PathToWater) == 0 {
+				continue
+			}
+			colony.Tasks = append(ctrl.Colony.Tasks[:i], ctrl.Colony.Tasks[i+1:]...)
+		} else {
+			i++
+		}
+	}
 
 	for m := range ctrl.Colony.Members {
 		if !m.ConnnectedToColony {
@@ -156,9 +189,9 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 			m.Inventory.Amount--
 		}
 		if m.Inventory.Amount > 0 {
-			m.Hp += 5
+			m.Hp += 15
 		} else {
-			m.Hp += 2
+			m.Hp += 12
 		}
 	}
 	if ctrl.Amount > 0 {
@@ -166,6 +199,10 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 	}
 
 	// fmt.Println(ctrl.Amount)
+}
+
+func (g *Game) findPath() []util.Position {
+	panic("unimplemented")
 }
 
 func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) {
@@ -317,7 +354,7 @@ func (g *Game) initialBotsGeneration() {
 			if !g.Board.IsEmpty(pos) || !util.RollChance(g.config.BotChance) {
 				continue
 			}
-			b := bot.NewBot()
+			b := bot.NewBot(pos)
 			if g.InitialGenome != nil {
 				b.Genome = *g.InitialGenome
 			}
@@ -386,7 +423,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(4)
 				continue
 			}
-			child := b.NewChild(g.config.ShouldMutateColor)
+			child := b.NewChild(newPos, g.config.ShouldMutateColor)
 			b.Hp -= g.config.DivisionCost
 			g.Bots[idx(newPos)] = child
 			g.Board.Set(newPos, child)
@@ -705,7 +742,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 }
 
 func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) board.Position {
-	newPos := oldPos.Add(b.Dir[0], b.Dir[1])
+	newPos := oldPos.AddDir(b.Dir)
 	if !g.Board.IsEmpty(newPos) {
 		return newPos
 	}
@@ -717,6 +754,7 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) board.Position {
 
 	g.Board.MarkDirty(util.Idx(newPos))
 	g.Board.MarkDirty(util.Idx(oldPos))
+	b.Pos = newPos
 	return newPos
 }
 
@@ -761,7 +799,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		if !found {
 			return
 		}
-		child := b.NewChild(g.config.ShouldMutateColor)
+		child := b.NewChild(spawnPos, g.config.ShouldMutateColor)
 		g.Board.Set(spawnPos, &child)
 		g.Bots[idx(spawnPos)] = child
 		b.PointerJumpBy(2)

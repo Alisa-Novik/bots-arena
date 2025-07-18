@@ -20,6 +20,7 @@ type Bot struct {
 	Hp                 int
 	Color              [3]float32
 	HasSpawner         bool
+	Pos                util.Position
 
 	hashLo, hashHi uint64
 	Unloading      bool
@@ -77,12 +78,14 @@ type ColonyTaskType int
 
 const (
 	FindWater ColonyTaskType = iota
+	ConnectToPos
 )
 
 type ColonyTask struct {
 	Colony *Colony
 	Type   ColonyTaskType
 	Owner  *Bot
+	Pos    util.Position
 }
 
 type ColonyFlag struct {
@@ -91,12 +94,13 @@ type ColonyFlag struct {
 }
 
 type Colony struct {
-	Center   util.Position
-	Members  map[*Bot]struct{}
-	HasWater bool
-	Flags    []*ColonyFlag
-	Markers  []*ColonyMarker
-	Tasks    []*ColonyTask
+	Center      util.Position
+	Members     map[*Bot]struct{}
+	HasWater    bool
+	Flags       []*ColonyFlag
+	Markers     []*ColonyMarker
+	Tasks       []*ColonyTask
+	PathToWater []util.Position
 
 	WaterPositions []util.Position
 	WaterGroupIds  []int
@@ -120,6 +124,15 @@ func (c *Colony) HasTask(taskType ColonyTaskType) bool {
 		}
 	}
 	return false
+}
+
+func (c *Colony) NewConnectionTask(pos util.Position, owner *Bot) *ColonyTask {
+	return &ColonyTask{
+		Colony: c,
+		Type:   ConnectToPos,
+		Owner:  owner,
+		Pos:    pos,
+	}
 }
 
 func (c *Colony) NewTask(taskType ColonyTaskType, owner *Bot) *ColonyTask {
@@ -180,9 +193,10 @@ func (c *Colony) FlagsCount() int {
 	return len(c.Flags)
 }
 
-func NewBot() Bot {
+func NewBot(pos util.Position) Bot {
 	return Bot{
 		Dir:                RandomDir(),
+		Pos:                pos,
 		Genome:             NewRandomGenome(),
 		Inventory:          NewEmptyInventory(),
 		Colony:             nil,
@@ -205,7 +219,7 @@ var BotPool = sync.Pool{
 	New: func() any { return new(Bot) },
 }
 
-func (parent *Bot) NewChild(shouldMutateColor bool) *Bot {
+func (parent *Bot) NewChild(pos util.Position, shouldMutateColor bool) *Bot {
 	if rand.Intn(1000) < 5 {
 		return BotPool.Get().(*Bot)
 	}
@@ -218,6 +232,7 @@ func (parent *Bot) NewChild(shouldMutateColor bool) *Bot {
 	b.Genome = NewMutatedGenome(parent.Genome, doMutation)
 	b.Inventory = NewEmptyInventory()
 	b.Colony = parent.Colony
+	b.Pos = pos
 
 	b.Parent = parent
 	if b.Offsprings == nil {

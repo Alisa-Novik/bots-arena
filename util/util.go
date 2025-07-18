@@ -1,6 +1,7 @@
 package util
 
 import (
+	"math"
 	"math/rand"
 )
 
@@ -36,6 +37,12 @@ type Position struct{ R, C int }
 func NewPos(r, c int) Position {
 	nc := (c + Cols) % Cols
 	return Position{R: r, C: nc}
+}
+
+func CalcDistance(a, b Position) int {
+	dr := float64(a.R - b.R)
+	dc := float64(a.C - b.C)
+	return int(math.Floor(math.Sqrt(dr*dr + dc*dc)))
 }
 
 func OutOfBounds(p Position) bool {

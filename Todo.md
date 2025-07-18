@@ -8,9 +8,10 @@ Ideas for controller tasks
 1) find water; 
 2) build Mine; 
 3) find other colonies; 
-4) 
+4) build wall;
+5) 
 __
-1) Colony should be able to issue high level tasks like "form a connection to water"
+1) Colony should be able to issue high level tasks like "form a connection"
 2) Whenever colony (opens Water as a resource?) has connection to a Water
 it should be able to build special type of building which is "Windmill" that allows
 to recycle extra bots into inventory amount.
