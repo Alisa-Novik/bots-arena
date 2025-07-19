@@ -43,6 +43,7 @@ func main() {
 	g := game.NewGame(&config)
 
 	ui.SetConfig(&config)
+	ui.SetBoard(g.Board)
 	ui.SetGameState(g.State)
 
 	pprof.StartCPUProfile(f)

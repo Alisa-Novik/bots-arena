@@ -67,6 +67,11 @@ type Config struct {
 	LogicStep time.Duration `json:"logicStep"`
 	Pause     bool          `json:"pause"`
 	LiveBots  int           `json:"liveBots"`
+
+	// UI
+	RenderPaths        bool `json:"renderPaths"`
+	RenderUnreachables bool `json:"renderUnreachables"`
+	RenderTaskTargets  bool `json:"renderTaskTargets"`
 }
 
 func NewConfig() Config {
@@ -85,7 +90,7 @@ func NewConfig() Config {
 		NewGenThreshold:  5,
 		ChildrenByBot:    20,
 		DivisionCost:     25,
-		DivisionMinHp:    95,
+		DivisionMinHp:    100,
 		DisableFarms:     false,
 		UseInitialGenome: false,
 
@@ -119,11 +124,27 @@ func NewConfig() Config {
 		LogicStep: 100000000 * time.Nanosecond * 3,
 		Pause:     false,
 		LiveBots:  0,
+
+		RenderPaths:        true,
+		RenderUnreachables: true,
+		RenderTaskTargets:  true,
 	}
 }
 
 func (c *Config) SlowDown() {
 	c.LogicStep *= 2
+}
+
+func (c *Config) ToggleTaskTargets() {
+	c.RenderTaskTargets = !c.RenderTaskTargets
+}
+
+func (c *Config) ToggleUnreachables() {
+	c.RenderUnreachables = !c.RenderUnreachables
+}
+
+func (c *Config) TogglePaths() {
+	c.RenderPaths = !c.RenderPaths
 }
 
 func (c *Config) SpeedUp() {

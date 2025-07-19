@@ -17,6 +17,7 @@ type Resource struct {
 }
 type Water struct {
 	GroupId int
+	Amount  int
 }
 type Organics struct {
 	Pos    Position
@@ -42,10 +43,11 @@ type Mine struct {
 	Amount int
 }
 type Controller struct {
-	Pos    Position
-	Colony *bot.Colony
-	Owner  *bot.Bot
-	Amount int
+	Pos         Position
+	Colony      *bot.Colony
+	Owner       *bot.Bot
+	Amount      int
+	WaterAmount int
 }
 type Poison struct {
 	Pos Position
@@ -56,7 +58,9 @@ type Building struct {
 	Hp    int
 }
 type Board struct {
-	PathsToRender []util.Position
+	TaskTargetsR   []util.Position
+	PathsToRenderR []util.Position
+	UnreachablesR  []util.Position
 
 	grid     []Occupant
 	occupied []bool
@@ -153,6 +157,14 @@ func (b *Board) Set(pos Position, o Occupant) {
 	b.occupied[i] = true
 	b.MarkDirty(i)
 	b.grid[i] = o
+}
+
+func (b *Board) IsEmptyNoBot(pos Position) bool {
+	if !(pos.R >= 0 && pos.R < Rows) {
+		return false
+	}
+
+	return b.grid[idx(pos)] == nil
 }
 
 func (b *Board) IsEmpty(pos Position) bool {

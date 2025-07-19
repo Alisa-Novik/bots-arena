@@ -18,6 +18,10 @@ import (
 
 type Position = board.Position
 
+type Callbacks struct {
+	PrintPathToTask func(util.Position) *bot.Bot
+}
+
 const (
 	rows = board.Rows
 	cols = board.Cols
@@ -56,7 +60,9 @@ var (
 )
 
 var conf *config.Config
+var brd *board.Board // for marking as dirty
 var gameState *config.GameState
+var GameCallbacks Callbacks
 
 // Camera
 var (
@@ -75,14 +81,6 @@ var Font *gltext.Font
 const tile = 1.0 / 11.0
 
 type v = struct{ x, y, u, v, r, g, b, a float32 }
-
-func makeVert(p board.Position, col [3]float32, uv [4]float32) v {
-	return v{
-		float32(p.C), float32(p.R),
-		uv[0], uv[1],
-		col[0], col[1], col[2], 1,
-	}
-}
 
 var buf []v
 
@@ -107,7 +105,7 @@ func BuildStaticLayer(brd *board.Board) {
 
 	for idx, occ := range *brd.GetGrid() {
 		pos := board.Position{R: idx / board.Cols, C: idx % board.Cols}
-		col, uv := pickSprite(occ)
+		col, uv := pickSprite(occ, idx)
 		if occ == nil || mayVanish(occ) {
 			writeQuad(vertsDyn, idx*vPerQuad, pos, clrDefault, uvEmpty)
 			continue
@@ -139,20 +137,17 @@ func mayVanish(o board.Occupant) bool {
 	}
 }
 
-func appendQuad(buf *[]v, x, y float32, c [3]float32, uv [4]float32) {
-	*buf = append(*buf,
-		v{x, y, uv[0], uv[1], c[0], c[1], c[2], 1},
-		v{x + 1, y, uv[2], uv[1], c[0], c[1], c[2], 1},
-		v{x + 1, y + 1, uv[2], uv[3], c[0], c[1], c[2], 1},
-		v{x, y + 1, uv[0], uv[3], c[0], c[1], c[2], 1},
-	)
-}
-
 func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
 	if action != glfw.Press {
 		return
 	}
 	switch key {
+	case glfw.KeyE:
+		conf.ToggleTaskTargets()
+	case glfw.KeyW:
+		conf.ToggleUnreachables()
+	case glfw.KeyQ:
+		conf.TogglePaths()
 	case glfw.KeyK:
 		conf.SpeedUp()
 	case glfw.KeyJ:
@@ -174,6 +169,13 @@ func SetGameState(s *config.GameState) {
 	gameState = s
 }
 
+func SetBoard(theBoard *board.Board) {
+	if theBoard == nil {
+		panic("brd is nil")
+	}
+	brd = theBoard
+}
+
 func SetConfig(config *config.Config) {
 	if config == nil {
 		panic("config is nil")
@@ -191,10 +193,15 @@ func PrepareUi() {
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)
 	window, err := glfw.CreateWindow(screenW, screenH, "Bot Arena", nil, nil)
 	AppWindow = window
+
 	window.SetScrollCallback(scrollCallback)
 	window.SetMouseButtonCallback(mouseButtonCallback)
 	window.SetKeyCallback(keyCallback)
 	window.SetCursorPosCallback(cursorPosCallback)
+
+	window.SetFramebufferSizeCallback(func(w *glfw.Window, pxW, pxH int) {
+		gl.Viewport(0, 0, int32(pxW), int32(pxH))
+	})
 
 	if err != nil {
 		panic(err)
@@ -339,15 +346,34 @@ func LoadFont(name string) *gltext.Font {
 	return ft
 }
 
+var hoveredIdx = -1
+
 func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
+	winW, winH := w.GetSize()
+
+	// hover calculation
+	cellPxX := float32(winW) / float32(cols) * camScale
+	cellPxY := float32(winH) / float32(rows) * camScale
+	wx := camX + float32(xpos)/cellPxX
+	wy := camY + float32(float32(winH)-float32(ypos))/cellPxY
+	r, c := int(wy), int(wx)
+	idx := r*board.Cols + c
+	if idx != hoveredIdx && idx >= 0 && idx < maxCells {
+		if hoveredIdx >= 0 {
+			brd.MarkDirty(hoveredIdx)
+		}
+		hoveredIdx = idx
+		brd.MarkDirty(hoveredIdx)
+	}
+
+	// camera drag
 	if !dragging {
 		return
 	}
-	winW, winH := w.GetSize()
 	dx := xpos - dragStartX
 	dy := ypos - dragStartY
 	camX = camStartX - float32(dx)*float32(cols)/float32(winW)/camScale
-	camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale // y axis is flipped
+	camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale
 }
 
 func ApplyCamera() {
@@ -368,6 +394,27 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 		dragStartX, dragStartY = w.GetCursorPos()
 		camStartX, camStartY = camX, camY
 	case glfw.Release:
+		if hoveredIdx != -1 {
+			hoveredPos := util.PosOf(hoveredIdx)
+
+			if b := GameCallbacks.PrintPathToTask(hoveredPos); b != nil {
+
+				taskIsDone := "no"
+				if b.CurrTask != nil && b.CurrTask.IsDone {
+					taskIsDone = "yes"
+				}
+				targetPos := util.NewPos(0, 0)
+				if b.CurrTask != nil {
+					targetPos = b.Pos
+				}
+
+				fmt.Printf("Bot Pos: %v; Path: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
+					b.Pos, b.PathToTaskStart, b.CurrTask == nil, taskIsDone, targetPos)
+			} else {
+				fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
+					util.PosOf(hoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
+			}
+		}
 		dragging = false
 	}
 }
@@ -403,7 +450,12 @@ func drawFloatingPane(offsetX float32, renderText func()) {
 	renderText()
 }
 
-func pickSprite(o board.Occupant) (color [3]float32, uv [4]float32) {
+func pickSprite(o board.Occupant, idx int) (color [3]float32, uv [4]float32) {
+	if idx == hoveredIdx {
+		if _, ok := o.(*bot.Bot); ok {
+			return util.YellowColor(), uvBot
+		}
+	}
 	switch o := o.(type) {
 	case *bot.Bot:
 		r, g, b := o.Color[0], o.Color[1], o.Color[2]
@@ -492,9 +544,17 @@ func DrawGrid(brd *board.Board, bots []*bot.Bot) {
 
 		// -------- tile idx IS dirty --------
 		p := Position{R: idx / board.Cols, C: idx % board.Cols}
-		col, uv := pickSprite(brd.At(p))
-		if slices.Contains(brd.PathsToRender, p) {
-			col, uv = util.GreenColor(), uvEmpty
+		col, uv := pickSprite(brd.At(p), idx)
+		if conf.RenderPaths && slices.Contains(brd.PathsToRenderR, p) {
+			// if bots[util.Idx(p)] == nil {
+			col, uv = util.CyanColor(), uvLight
+			// }
+		}
+		if conf.RenderTaskTargets && slices.Contains(brd.TaskTargetsR, p) {
+			col, uv = util.PinkColor(), uvLight
+		}
+		if conf.RenderUnreachables && slices.Contains(brd.UnreachablesR, p) {
+			col, uv = util.RedColor(), uvLight
 		}
 		base := idx * vPerQuad
 		writeQuad(vertsDyn, base, p, col, uv)

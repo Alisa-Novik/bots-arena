@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	ScaleFactor = 5
+	ScaleFactor = 4
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
 	Cells       = Rows * Cols
@@ -34,9 +34,17 @@ func (q *Queue[T]) Empty() bool {
 
 type Position struct{ R, C int }
 
+func (p Position) IsZero() bool {
+	return p.R == 0 && p.C == 0
+}
+
 func NewPos(r, c int) Position {
 	nc := (c + Cols) % Cols
 	return Position{R: r, C: nc}
+}
+
+func CalcDistancePos(a, b Position) Position {
+	return Position{R: b.R - a.R, C: b.C - a.C}
 }
 
 func CalcDistance(a, b Position) int {
@@ -60,7 +68,7 @@ func (p Position) AddDir(dir Direction) Position {
 	return Position{R: nr, C: nc}
 }
 
-func (p Position) Add(dr, dc int) Position {
+func (p Position) AddRowCol(dr, dc int) Position {
 	nr := p.R + dr
 	nc := (p.C + dc + Cols) % Cols
 	return Position{R: nr, C: nc}
@@ -105,7 +113,7 @@ func FindPath(start, end Position, passable func(Position) bool) []Position {
 		curr := queue[0]
 		queue = queue[1:]
 		for _, d := range PosCross {
-			next := curr.Add(d[0], d[1])
+			next := curr.AddRowCol(d[0], d[1])
 			if _, seen := visited[next]; seen || (!passable(next) && next != end) {
 				continue
 			}

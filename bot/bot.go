@@ -22,10 +22,19 @@ type Bot struct {
 	PrevColor          [3]float32
 	HasSpawner         bool
 	Pos                util.Position
+	CurrTask           *ColonyTask
+	PathToTaskStart    []util.Position
+	AttemptsToPassTask int
 
 	hashLo, hashHi uint64
 	Unloading      bool
 	Usp            [2]int // unloading starting pos
+}
+
+func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
+	// b.PrevColor = b.Color
+	b.Color = color
+	markDirty(util.Idx(b.Pos))
 }
 
 var (
@@ -77,16 +86,31 @@ type ColonyMarker struct {
 
 type ColonyTaskType int
 
+func (t ColonyTaskType) String() string {
+	switch t {
+	case MaintainConnectionTask:
+		return "MaintainConnectionTask"
+	case ConnectToPosTask:
+		return "ConnectToPosTask"
+	case FindWaterTask:
+		return "FindWaterTask"
+	}
+	return "UnknownTaskType"
+}
+
 const (
-	FindWater ColonyTaskType = iota
-	ConnectToPos
+	FindWaterTask ColonyTaskType = iota
+	ConnectToPosTask
+	MaintainConnectionTask
 )
 
 type ColonyTask struct {
-	Colony *Colony
-	Type   ColonyTaskType
-	Owner  *Bot
-	Pos    util.Position
+	Colony   *Colony
+	Type     ColonyTaskType
+	Attempts int
+	Owner    *Bot
+	IsDone   bool
+	Pos      util.Position
 }
 
 type ColonyFlag struct {
@@ -120,29 +144,40 @@ func NewColony(pos util.Position) Colony {
 	}
 }
 
+func (b *Bot) PassTaskTo(other *Bot) {
+}
+
 func (c *Colony) HasTask(taskType ColonyTaskType) bool {
 	for _, task := range c.Tasks {
-		if task.Type == FindWater {
+		if task.Type == FindWaterTask {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *Colony) NewConnectionTask(pos util.Position, owner *Bot) *ColonyTask {
-	return &ColonyTask{
-		Colony: c,
-		Type:   ConnectToPos,
-		Owner:  owner,
-		Pos:    pos,
+func (b *Bot) ReassignTask(task *ColonyTask) {
+	if task.Owner != nil {
+		task.Owner.CurrTask = nil
 	}
+	task.Owner = b
+	b.CurrTask = task
 }
 
-func (c *Colony) NewTask(taskType ColonyTaskType, owner *Bot) *ColonyTask {
+func (c *Colony) NewMaintainConnectionTask(pos util.Position) *ColonyTask {
+	return c.NewTask(pos, MaintainConnectionTask)
+}
+
+func (c *Colony) NewConnectionTask(pos util.Position) *ColonyTask {
+	return c.NewTask(pos, ConnectToPosTask)
+}
+
+func (c *Colony) NewTask(pos util.Position, taskType ColonyTaskType) *ColonyTask {
 	return &ColonyTask{
 		Colony: c,
+		Pos:    pos,
 		Type:   taskType,
-		Owner:  owner,
+		Owner:  nil,
 	}
 }
 
@@ -152,6 +187,10 @@ func (c *Colony) NewMarker(pos util.Position, markerType ColonyMarkerType) *Colo
 		Type:   markerType,
 		Colony: c,
 	}
+}
+
+func (b *Bot) MaintainingConn() bool {
+	return b.CurrTask != nil && b.CurrTask.Type == MaintainConnectionTask && !b.CurrTask.IsDone
 }
 
 func (c *Colony) KnowsWaterGroupId(groupId int) bool {
