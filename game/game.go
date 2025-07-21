@@ -141,16 +141,16 @@ func (g *Game) isEmptyOrBot(p util.Position) bool {
 }
 
 func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
+	c := ctrl.Colony
+
 	if ctrl.Owner == nil {
-		for m := range ctrl.Colony.Members {
-			if !m.ConnnectedToColony {
-				continue
-			}
+		for m := range c.Members {
+			m.DisconnectFromColony()
 		}
-		for _, f := range ctrl.Colony.Flags {
+		for _, f := range c.Flags {
 			g.Board.Clear(f.Pos)
 		}
-		g.Board.Clear(pos)
+		g.Board.Clear(ctrl.Pos)
 		return
 	}
 
@@ -158,28 +158,18 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		g.connectBots(pos.AddDir(d), map[*core.Bot]struct{}{}, ctrl.Colony)
 	}
 
-	radius := 5
-	for _, f := range ctrl.Colony.Flags {
-		for r := -radius; r <= radius; r++ {
-			for c := -radius; c <= radius; c++ {
-				flagBot := g.GetBot(f.Pos.AddRowCol(r, c))
-				if flagBot == nil {
-					continue
-				}
-				flagBot.Hp += g.calcHpChange()
-			}
-		}
+	c.HealBotsInFlagRadius(5, g.calcHpChange())
+
+	// scheduler -> creates tasks to issue with pre-defined owners
+	tasks := scheduler.tasksToIssue()
+
+	if len(c.WaterPositions) > 0 && !c.HasTaskOfType(core.ConnectToPosTask) {
+		// task := c.NewConnectionTask(util.NewPos(0, 0))
+		task := c.NewConnectionTask(c.WaterPositions[0])
+		c.AddTask(task)
 	}
 
-	colony := ctrl.Colony
-
-	if len(colony.Members) > 10 && len(colony.WaterPositions) > 0 && len(colony.PathToWater) == 0 && !colony.HasTaskOfType(core.ConnectToPosTask) {
-		task := colony.NewConnectionTask(util.NewPos(0, 0))
-		// task := colony.NewConnectionTask(colony.WaterPositions[0])
-		colony.AddTask(task)
-	}
-
-	for _, task := range ctrl.Colony.Tasks {
+	for _, task := range c.Tasks {
 		if b := task.Owner; b != nil {
 			b.Hp += 15
 			if !task.IsDone {
@@ -197,24 +187,14 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		case core.ConnectToPosTask:
 			g.handleCreateConnTask(task, ctrl)
 		case core.MaintainConnectionTask:
-			if task.IsDone && task.Owner.Pos != task.Pos {
-				//FIXME: disgusting thing. extremely fragile.
-				task.Owner.UnassignTask()
-			}
 			if task.Owner != nil {
 				continue
 			}
-			fmt.Printf("task.Owner for %v task is nil. Needs new owner.\n", task.Pos)
-			task.Attempts++
-			if task.Attempts > 1 {
-				fmt.Printf("Attempted to assign %v task %v times..\n", task.Pos, task.Attempts)
-			}
-			for _, b := range SortByDistance(colony.Members, task.Pos) {
+			for _, b := range SortByDistance(c.Members, task.Pos) {
 				if b.CurrTask != nil {
 					continue
 				}
 				path := g.calcPath(b.Pos, task.Pos, g.isEmptyOrBot)
-				// fmt.Printf("path %v, start %v, target %v\n", )
 				if len(path) == 0 {
 					continue
 				}
@@ -226,28 +206,8 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		}
 	}
 
-	for m := range ctrl.Colony.Members {
-		if !m.ConnnectedToColony {
-			continue
-		}
-		if ctrl.Amount == 0 && m.Inventory.Amount > 0 {
-			ctrl.Amount++
-			m.Inventory.Amount--
-		}
-		if m.Inventory.Amount > 0 {
-			m.Hp += 5
-		} else {
-			m.Hp += 3
-		}
-		if ctrl.Amount > 0 {
-			ctrl.Amount--
-		}
-	}
-
-	// Rendering / Color
-	for _, pathPos := range colony.PathToWater {
-		g.Board.MarkDirty(idx(pathPos))
-		g.Board.PathsToRenderR = append(g.Board.PathsToRenderR, pathPos)
+	for m := range c.Members {
+		c.HealMember(m, ctrl)
 	}
 }
 

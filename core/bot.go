@@ -35,6 +35,14 @@ type Bot struct {
 	Usp            [2]int // unloading starting pos
 }
 
+func (m *Bot) DisconnectFromColony() {
+	m.ConnnectedToColony = false
+	m.Colony = nil
+	if m.CurrTask != nil {
+		m.UnassignTask()
+	}
+}
+
 func NewBot(pos util.Position) Bot {
 	color := util.RandomColor()
 	return Bot{
@@ -62,6 +70,8 @@ func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
 }
 
 func (b *Bot) UnassignTask() {
+	assert(b.CurrTask != nil, "No task to unassign")
+
 	b.CurrTask.Owner = nil
 	b.CurrTask = nil
 	b.Path = nil

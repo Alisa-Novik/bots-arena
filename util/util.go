@@ -38,6 +38,18 @@ func (p Position) IsZero() bool {
 	return p.R == 0 && p.C == 0
 }
 
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func toroidalDelta(a, b, size int) int {
+	d := abs(a - b)
+	return min(d, size-d)
+}
+
 func NewPos(r, c int) Position {
 	nc := (c + Cols) % Cols
 	return Position{R: r, C: nc}
@@ -60,6 +72,12 @@ func OutOfBounds(p Position) bool {
 func (p Position) AddPos(other Position) Position {
 	nc := (p.C + other.C + Cols) % Cols
 	return Position{R: p.R + other.R, C: nc}
+}
+
+func (p Position) InRadius(center Position, radius int) bool {
+	dr := toroidalDelta(p.R, center.R, Rows)
+	dc := toroidalDelta(p.C, center.C, Cols)
+	return dr <= radius && dc <= radius
 }
 
 func (p Position) AddDir(dir Direction) Position {

@@ -65,6 +65,54 @@ type Colony struct {
 	WaterGroupIds  []int
 }
 
+type Controller struct {
+	Pos         Position
+	Colony      *Colony
+	Owner       *Bot
+	Amount      int
+	WaterAmount int
+}
+
+func (c *Colony) HealMember(m *Bot, ctrl *Controller) {
+	if !m.ConnnectedToColony {
+		return
+	}
+	if ctrl.Amount == 0 && m.Inventory.Amount > 0 {
+		ctrl.Amount++
+		m.Inventory.Amount--
+	}
+	if m.Inventory.Amount > 0 {
+		m.Hp += 5
+	} else {
+		m.Hp += 3
+	}
+	if ctrl.Amount > 0 {
+		ctrl.Amount--
+	}
+}
+
+func (c *Colony) HealBotsInFlagRadius(radius, hpChange int) {
+	for m, _ := range c.Members {
+		for _, f := range c.Flags {
+			if m.Pos.InRadius(f.Pos, radius) {
+				m.Hp += hpChange
+			}
+		}
+	}
+}
+
+func NewColony(pos util.Position) Colony {
+	return Colony{
+		Center:   pos,
+		HasWater: false,
+		// Color:    util.RandomColor(),
+		Color:   util.RedColor(),
+		Members: make(map[*Bot]struct{}),
+		// WaterPositions: make([]util.Position, 10),
+		// WaterGroupIds:  make([]int, 10),
+	}
+}
+
 func (t *ColonyTask) MarkDone() {
 	t.IsDone = true
 }
@@ -143,16 +191,4 @@ func (c *Colony) AddMember(offspring *Bot) {
 
 func (c *Colony) FlagsCount() int {
 	return len(c.Flags)
-}
-
-func NewColony(pos util.Position) Colony {
-	return Colony{
-		Center:   pos,
-		HasWater: false,
-		// Color:    util.RandomColor(),
-		Color:   util.RedColor(),
-		Members: make(map[*Bot]struct{}),
-		// WaterPositions: make([]util.Position, 10),
-		// WaterGroupIds:  make([]int, 10),
-	}
 }

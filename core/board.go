@@ -40,13 +40,6 @@ type Mine struct {
 	Owner  *Bot
 	Amount int
 }
-type Controller struct {
-	Pos         Position
-	Colony      *Colony
-	Owner       *Bot
-	Amount      int
-	WaterAmount int
-}
 type Poison struct {
 	Pos Position
 }
