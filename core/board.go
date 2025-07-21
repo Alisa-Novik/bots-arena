@@ -1,9 +1,7 @@
-package board
+package core
 
 import (
-	"golab/bot"
 	"golab/util"
-
 	"golang.org/x/exp/rand"
 )
 
@@ -29,23 +27,23 @@ type Food struct {
 }
 type Farm struct {
 	Pos    Position
-	Owner  *bot.Bot
+	Owner  *Bot
 	Amount int
 }
 type Spawner struct {
 	Pos    Position
-	Owner  *bot.Bot
+	Owner  *Bot
 	Amount int
 }
 type Mine struct {
 	Pos    Position
-	Owner  *bot.Bot
+	Owner  *Bot
 	Amount int
 }
 type Controller struct {
 	Pos         Position
-	Colony      *bot.Colony
-	Owner       *bot.Bot
+	Colony      *Colony
+	Owner       *Bot
 	Amount      int
 	WaterAmount int
 }
@@ -54,7 +52,7 @@ type Poison struct {
 }
 type Building struct {
 	Pos   Position
-	Owner *bot.Bot
+	Owner *Bot
 	Hp    int
 }
 type Board struct {
@@ -126,7 +124,6 @@ func NewBoard() *Board {
 		grid:     make([]Occupant, Rows*Cols),
 		occupied: make([]bool, Rows*Cols),
 		dirty:    make([]bool, Rows*Cols),
-		// colonyCells: make([]ColonyCell, Rows*Cols),
 	}
 }
 

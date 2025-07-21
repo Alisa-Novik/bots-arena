@@ -3,10 +3,9 @@ package game
 import (
 	"cmp"
 	"fmt"
-	"golab/board"
-	"golab/bot"
 	"golab/config"
 	conf "golab/config"
+	"golab/core"
 	"golab/ui"
 	"golab/util"
 	"math/rand"
@@ -15,10 +14,10 @@ import (
 )
 
 type Game struct {
-	Board         *board.Board
-	Bots          []*bot.Bot
-	Colonies      []*bot.Colony
-	InitialGenome *bot.Genome
+	Board         *core.Board
+	Bots          []*core.Bot
+	Colonies      []*core.Colony
+	InitialGenome *core.Genome
 	config        *conf.Config
 	State         *conf.GameState
 
@@ -28,16 +27,16 @@ type Game struct {
 	latestImprovement int
 }
 
-func idx(p board.Position) int {
+func idx(p core.Position) int {
 	return util.Idx(p)
 }
 
 func NewGame(config *conf.Config) *Game {
 	useInitialGenome := config.UseInitialGenome
 	return &Game{
-		Board:         board.NewBoard(),
-		Bots:          make([]*bot.Bot, util.Cells),
-		InitialGenome: bot.GetInitialGenome(useInitialGenome),
+		Board:         core.NewBoard(),
+		Bots:          make([]*core.Bot, util.Cells),
+		InitialGenome: core.GetInitialGenome(useInitialGenome),
 		config:        config,
 		State:         &conf.GameState{LastLogic: time.Now()},
 		maxHp:         0,
@@ -57,11 +56,11 @@ func (g *Game) RunHeadless() {
 }
 
 func (g *Game) environmentActions() {
-	for r := range board.Rows {
-		for c := range board.Cols {
-			pos := board.Position{C: c, R: r}
+	for r := range core.Rows {
+		for c := range core.Cols {
+			pos := core.Position{C: c, R: r}
 			switch v := g.Board.At(pos).(type) {
-			case board.Organics:
+			case core.Organics:
 				if v.Amount <= 1 {
 					g.Board.Clear(pos)
 					continue
@@ -69,10 +68,10 @@ func (g *Game) environmentActions() {
 				v.Amount--
 				g.Board.Set(pos, v)
 				continue
-			case board.Controller:
+			case core.Controller:
 				g.handleController(&v, pos)
 				g.Board.Set(pos, v)
-			case board.Farm:
+			case core.Farm:
 				if v.Amount <= 0 {
 					continue
 				}
@@ -80,7 +79,7 @@ func (g *Game) environmentActions() {
 				if !ok {
 					continue
 				}
-				g.Board.Set(foodPos, board.Food{Pos: foodPos, Amount: 1})
+				g.Board.Set(foodPos, core.Food{Pos: foodPos, Amount: 1})
 				v.Amount--
 				g.Board.Set(pos, v)
 			}
@@ -88,7 +87,7 @@ func (g *Game) environmentActions() {
 	}
 }
 
-func (g *Game) killBot(b *bot.Bot, botIdx int) {
+func (g *Game) killBot(b *core.Bot, botIdx int) {
 	if b.Path != nil {
 		b.Path = nil
 	}
@@ -103,40 +102,34 @@ func (g *Game) killBot(b *bot.Bot, botIdx int) {
 	}
 	g.Bots[botIdx] = nil
 	g.Board.MarkDirty(botIdx)
-	*b = bot.Bot{}
-	bot.BotPool.Put(b)
+	*b = core.Bot{}
+	core.BotPool.Put(b)
 }
 
-func SortByDistance(members map[*bot.Bot]struct{}, target util.Position) []*bot.Bot {
-	bots := make([]*bot.Bot, 0, len(members))
+func SortByDistance(members map[*core.Bot]struct{}, target util.Position) []*core.Bot {
+	bots := make([]*core.Bot, 0, len(members))
 	for bot := range members {
 		bots = append(bots, bot)
 	}
 
-	slices.SortFunc(bots, func(a, b *bot.Bot) int {
+	slices.SortFunc(bots, func(a, b *core.Bot) int {
 		return cmp.Compare(util.CalcDistance(a.Pos, target), util.CalcDistance(b.Pos, target))
 	})
 
 	return bots
 }
 
-func (g *Game) isEmptyOrBotNoTask(p util.Position) bool {
-	if util.OutOfBounds(p) {
-		return false
-	}
-	b := g.Bots[idx(p)]
-	return g.Board.IsEmpty(p) || (b != nil && b.CurrTask == nil)
-}
-
 func (g *Game) isEmptyOrBotWithUndoneTask(p util.Position) bool {
 	if util.OutOfBounds(p) {
 		return false
 	}
-	if g.Board.IsEmpty(p) {
+
+	b := g.Bots[idx(p)]
+
+	if g.Board.IsEmpty(p) && b == nil {
 		return true
 	}
-	b := g.Bots[idx(p)]
-	return b == nil || b.CurrTask == nil || !b.CurrTask.IsDone
+	return b != nil && b.HasUndoneTask()
 }
 
 func (g *Game) isEmptyOrBot(p util.Position) bool {
@@ -147,7 +140,7 @@ func (g *Game) isEmptyOrBot(p util.Position) bool {
 	return g.Board.IsEmpty(p) || b != nil
 }
 
-func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
+func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 	if ctrl.Owner == nil {
 		for m := range ctrl.Colony.Members {
 			if !m.ConnnectedToColony {
@@ -161,8 +154,8 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 		return
 	}
 
-	for _, d := range bot.Dirs {
-		g.connectBots(pos.AddDir(d), map[*bot.Bot]struct{}{}, ctrl.Colony)
+	for _, d := range core.Dirs {
+		g.connectBots(pos.AddDir(d), map[*core.Bot]struct{}{}, ctrl.Colony)
 	}
 
 	radius := 5
@@ -180,8 +173,9 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 
 	colony := ctrl.Colony
 
-	if len(colony.Members) > 10 && len(colony.WaterPositions) > 0 && len(colony.PathToWater) == 0 && !colony.HasTaskOfType(bot.ConnectToPosTask) {
-		task := colony.NewConnectionTask(colony.WaterPositions[0])
+	if len(colony.Members) > 10 && len(colony.WaterPositions) > 0 && len(colony.PathToWater) == 0 && !colony.HasTaskOfType(core.ConnectToPosTask) {
+		task := colony.NewConnectionTask(util.NewPos(0, 0))
+		// task := colony.NewConnectionTask(colony.WaterPositions[0])
 		colony.AddTask(task)
 	}
 
@@ -200,15 +194,20 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 		}
 
 		switch task.Type {
-		case bot.ConnectToPosTask:
+		case core.ConnectToPosTask:
 			g.handleCreateConnTask(task, ctrl)
-		case bot.MaintainConnectionTask:
+		case core.MaintainConnectionTask:
+			if task.IsDone && task.Owner.Pos != task.Pos {
+				//FIXME: disgusting thing. extremely fragile.
+				task.Owner.UnassignTask()
+			}
 			if task.Owner != nil {
 				continue
 			}
+			fmt.Printf("task.Owner for %v task is nil. Needs new owner.\n", task.Pos)
 			task.Attempts++
-			if task.Attempts > 3 {
-				fmt.Println("Attempted to assign task >3 times..")
+			if task.Attempts > 1 {
+				fmt.Printf("Attempted to assign %v task %v times..\n", task.Pos, task.Attempts)
 			}
 			for _, b := range SortByDistance(colony.Members, task.Pos) {
 				if b.CurrTask != nil {
@@ -252,7 +251,7 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 	}
 }
 
-func (g *Game) handleCreateConnTask(task *bot.ColonyTask, ctrl *board.Controller) {
+func (g *Game) handleCreateConnTask(task *core.ColonyTask, ctrl *core.Controller) {
 	colony := ctrl.Colony
 	task.Attempts++
 	if task.Attempts > 1 {
@@ -272,7 +271,7 @@ func (g *Game) handleCreateConnTask(task *bot.ColonyTask, ctrl *board.Controller
 	task.MarkDone()
 }
 
-func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) bool {
+func (g *Game) connectBots(currPos util.Position, visited map[*core.Bot]struct{}, colony *core.Colony) bool {
 	if util.OutOfBounds(currPos) {
 		return false
 	}
@@ -291,7 +290,7 @@ func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{},
 	visited[b] = struct{}{}
 
 	isOnBorder := false
-	for _, d := range bot.Dirs {
+	for _, d := range core.Dirs {
 		if !g.connectBots(currPos.AddDir(d), visited, colony) {
 			isOnBorder = true
 		}
@@ -328,7 +327,7 @@ func (g *Game) Run() {
 func (g *Game) generateWater() {
 	waterSpread := g.config.OceansCount * util.ScaleFactor
 	for i := range waterSpread {
-		center := board.NewRandomPosition()
+		center := core.NewRandomPosition()
 		radius := 1 + rand.Intn(4)
 		for dr := -radius; dr <= radius; dr++ {
 			for dc := -radius; dc <= radius+15; dc++ {
@@ -337,7 +336,7 @@ func (g *Game) generateWater() {
 				}
 				pos := center.AddRowCol(dc, dr)
 				if !g.Board.IsWall(pos) {
-					g.Board.Set(pos, board.Water{GroupId: i, Amount: 10000})
+					g.Board.Set(pos, core.Water{GroupId: i, Amount: 10000})
 				}
 			}
 		}
@@ -375,39 +374,39 @@ func (g *Game) step() {
 
 func (g *Game) populateBoard() {
 	oldBoard := g.Board
-	g.Board = board.NewBoard()
-	for r := range board.Rows {
-		for c := range board.Cols {
-			pos := board.Position{C: c, R: r}
+	g.Board = core.NewBoard()
+	for r := range core.Rows {
+		for c := range core.Cols {
+			pos := core.Position{C: c, R: r}
 			if g.Board.IsWall(pos) {
-				g.Board.Set(pos, board.Wall{Pos: pos})
+				g.Board.Set(pos, core.Wall{Pos: pos})
 				continue
 			}
-			if spawner, ok := oldBoard.At(pos).(board.Spawner); ok {
+			if spawner, ok := oldBoard.At(pos).(core.Spawner); ok {
 				g.Board.Set(pos, spawner)
 				continue
 			}
-			if _, ok := oldBoard.At(pos).(board.Organics); ok {
+			if _, ok := oldBoard.At(pos).(core.Organics); ok {
 				g.Board.Clear(pos)
 				continue
 			}
-			if f, ok := oldBoard.At(pos).(board.Farm); ok {
+			if f, ok := oldBoard.At(pos).(core.Farm); ok {
 				g.Board.Set(pos, f)
 				continue
 			}
-			if fd, ok := oldBoard.At(pos).(board.Food); ok {
+			if fd, ok := oldBoard.At(pos).(core.Food); ok {
 				g.Board.Set(pos, fd)
 				continue
 			}
-			if bld, ok := oldBoard.At(pos).(board.Building); ok {
+			if bld, ok := oldBoard.At(pos).(core.Building); ok {
 				g.Board.Set(pos, bld)
 				continue
 			}
-			if c, ok := oldBoard.At(pos).(board.Water); ok {
+			if c, ok := oldBoard.At(pos).(core.Water); ok {
 				g.Board.Set(pos, c)
 				continue
 			}
-			if c, ok := oldBoard.At(pos).(board.Controller); ok {
+			if c, ok := oldBoard.At(pos).(core.Controller); ok {
 				g.Board.Set(pos, c)
 				continue
 			}
@@ -416,11 +415,11 @@ func (g *Game) populateBoard() {
 				continue
 			}
 			if util.RollChanceOf(1000, g.config.PoisonChance) {
-				g.Board.Set(pos, board.Poison{Pos: pos})
+				g.Board.Set(pos, core.Poison{Pos: pos})
 				continue
 			}
 			if rand.Intn(100) < g.config.ResourceChance {
-				g.Board.Set(pos, board.Resource{Pos: pos, Amount: 1})
+				g.Board.Set(pos, core.Resource{Pos: pos, Amount: 1})
 				continue
 			}
 		}
@@ -428,13 +427,13 @@ func (g *Game) populateBoard() {
 }
 
 func (g *Game) initialBotsGeneration() {
-	for r := range board.Rows {
-		for c := range board.Cols {
-			pos := board.Position{C: c, R: r}
+	for r := range core.Rows {
+		for c := range core.Cols {
+			pos := core.Position{C: c, R: r}
 			if !g.Board.IsEmpty(pos) || !util.RollChance(g.config.BotChance) {
 				continue
 			}
-			b := bot.NewBot(pos)
+			b := core.NewBot(pos)
 			if g.InitialGenome != nil {
 				b.Genome = *g.InitialGenome
 			}
@@ -456,13 +455,13 @@ func (g *Game) botsActions() {
 		if b.Hp <= 0 {
 			g.killBot(b, i)
 			if rand.Intn(100) < 33 {
-				g.Board.Set(pos, board.Organics{Pos: pos, Amount: g.config.OrganicInitialAmount})
+				g.Board.Set(pos, core.Organics{Pos: pos, Amount: g.config.OrganicInitialAmount})
 			} else {
 				g.Board.Clear(pos)
 			}
 			continue
 		}
-		if b.CurrTask != nil && b.CurrTask.Type == bot.MaintainConnectionTask && b.CurrTask.IsDone {
+		if b.CurrTask != nil && b.CurrTask.Type == core.MaintainConnectionTask && b.CurrTask.IsDone {
 			continue
 		}
 		g.botAction(pos, b)
@@ -489,15 +488,15 @@ func (g *Game) calcHpChange() int {
 	return hpChange
 }
 
-func (g *Game) botAction(pos board.Position, b *bot.Bot) {
+func (g *Game) botAction(pos core.Position, b *core.Bot) {
 	for range 5 {
-		op := bot.Opcode(b.Genome.Matrix[b.Genome.Pointer])
+		op := core.Opcode(b.Genome.Matrix[b.Genome.Pointer])
 		if b.MaintainingConn() {
-			op = bot.OpMove
+			op = core.OpMove
 		}
 		// fmt.Printf("opcode: %v\n", op)
 		switch op {
-		case bot.OpDivide:
+		case core.OpDivide:
 			divMin := g.config.DivisionMinHp
 			if b.Colony != nil {
 				divMin = 80
@@ -519,7 +518,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(6)
 			return
 
-		case bot.OpCheckConnection:
+		case core.OpCheckConnection:
 			if b.ConnnectedToColony {
 				b.PointerJumpBy(1)
 				b.Genome.NextArg = 1
@@ -529,15 +528,15 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			continue
 
-		case bot.OpMoveAbs:
+		case core.OpMoveAbs:
 			b.Dir = util.PosClock[b.CmdArg(1)%8]
 			g.tryMove(pos, b)
 			b.PointerJumpBy(1)
 			return
 
-		case bot.OpCheckIfBro:
+		case core.OpCheckIfBro:
 			checkPos := b.CmdArgDir(1, pos)
-			other, ok := g.Board.At(checkPos).(*bot.Bot)
+			other, ok := g.Board.At(checkPos).(*core.Bot)
 			if !ok {
 				b.PointerJumpBy(1)
 				continue
@@ -549,9 +548,9 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(3)
 			continue
 
-		case bot.OpCheckColony:
+		case core.OpCheckColony:
 			checkPos := b.CmdArgDir(1, pos)
-			other, ok := g.Board.At(checkPos).(*bot.Bot)
+			other, ok := g.Board.At(checkPos).(*core.Bot)
 			if !ok {
 				b.PointerJumpBy(1)
 				continue
@@ -563,9 +562,9 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(3)
 			continue
 
-		case bot.OpAttack:
+		case core.OpAttack:
 			attackPos := b.CmdArgDir(1, pos)
-			other, ok := g.Board.At(attackPos).(*bot.Bot)
+			other, ok := g.Board.At(attackPos).(*core.Bot)
 			if !ok {
 				b.PointerJumpBy(1)
 				continue
@@ -582,21 +581,21 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(2)
 			return
 
-		case bot.OpMove:
+		case core.OpMove:
 			g.tryMove(pos, b)
 			b.PointerJumpBy(1)
 			return
 
-		case bot.OpTurn:
+		case core.OpTurn:
 			b.Dir = util.PosClock[b.CmdArg(1)%8]
 			b.PointerJumpBy(1)
 			continue
 
-		case bot.OpEatOther:
+		case core.OpEatOther:
 			arg := b.CmdArg(1)
 			dir := util.PosClock[arg%8]
 			eatPos := pos.AddRowCol(dir[0], dir[1])
-			other, ok := g.Board.At(eatPos).(*bot.Bot)
+			other, ok := g.Board.At(eatPos).(*core.Bot)
 
 			if ok && b.Hp >= other.Hp {
 				if other.SameColony(b) {
@@ -615,7 +614,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(2)
 			return
 
-		case bot.OpPhoto:
+		case core.OpPhoto:
 			row := pos.R
 			rows := util.Rows
 
@@ -643,11 +642,11 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(1)
 			return
 
-		case bot.OpLook:
+		case core.OpLook:
 			g.lookAround(pos, b)
 			continue
 
-		case bot.OpCheckInventory:
+		case core.OpCheckInventory:
 			amt := b.Inventory.Amount
 			b.Genome.NextArg = amt
 			if amt > 70 {
@@ -657,11 +656,11 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			continue
 
-		case bot.OpExecuteInstr:
+		case core.OpExecuteInstr:
 			b.PointerJumpBy(b.CmdArg(1))
 			continue
 
-		case bot.OpHpToResource:
+		case core.OpHpToResource:
 			// arg := b.CmdArg(1) % 4
 			// hpChange := arg * 10
 			// if b.Hp < hpChange {
@@ -673,7 +672,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(2)
 			return
 
-		case bot.OpCheckHp:
+		case core.OpCheckHp:
 			b.Genome.NextArg = b.Hp
 			if b.Hp > 100 {
 				b.PointerJumpBy(3)
@@ -682,9 +681,9 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			continue
 
-		case bot.OpEatOrganicsAbs:
+		case core.OpEatOrganicsAbs:
 			nextPos := b.CmdArgDir(1, pos)
-			o, ok := g.Board.At(nextPos).(board.Organics)
+			o, ok := g.Board.At(nextPos).(core.Organics)
 			if !ok {
 				b.PointerJumpBy(2)
 				continue
@@ -695,9 +694,9 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(1)
 			return
 
-		case bot.OpEatOrganics:
+		case core.OpEatOrganics:
 			nextPos := pos.AddRowCol(b.Dir[0], b.Dir[1])
-			o, ok := g.Board.At(nextPos).(board.Organics)
+			o, ok := g.Board.At(nextPos).(core.Organics)
 			if !ok {
 				b.PointerJumpBy(2)
 				continue
@@ -708,11 +707,11 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(1)
 			return
 
-		case bot.OpGrab:
+		case core.OpGrab:
 			g.grab(pos, b)
 			return
 
-		case bot.OpShareHp:
+		case core.OpShareHp:
 			if b.Hp < 20 {
 				b.PointerJumpBy(6)
 				continue
@@ -723,7 +722,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 				b.PointerJumpBy(5)
 				continue
 			}
-			other, ok := g.Board.At(sharePos).(*bot.Bot)
+			other, ok := g.Board.At(sharePos).(*core.Bot)
 			if !ok {
 				b.PointerJumpBy(4)
 				continue
@@ -734,14 +733,14 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(3)
 			return
 
-		case bot.OpShareInventory:
+		case core.OpShareInventory:
 			if b.Inventory.Amount < 5 {
 				b.PointerJumpBy(5)
 				continue
 			}
 			sharePos := b.CmdArgDir(1, pos)
 			shareAmount := b.CmdArg(2)
-			other, ok := g.Board.At(sharePos).(*bot.Bot)
+			other, ok := g.Board.At(sharePos).(*core.Bot)
 			if !ok {
 				b.PointerJumpBy(3)
 				continue
@@ -752,30 +751,30 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(2)
 			return
 
-		case bot.OpBuild:
+		case core.OpBuild:
 			g.build(pos, b)
 			g.Board.Set(pos, b)
 			continue
 
-		case bot.OpSetReg:
+		case core.OpSetReg:
 			reg := b.CmdArg(1) % 4
 			b.Genome.Registers[reg] = b.Genome.NextArg
 			b.PointerJumpBy(3)
 			return
 
-		case bot.OpIncReg:
+		case core.OpIncReg:
 			reg := b.CmdArg(1) % 4
 			b.Genome.Registers[reg]++
 			b.PointerJumpBy(2)
 			continue
 
-		case bot.OpDecReg:
+		case core.OpDecReg:
 			reg := b.CmdArg(1) % 4
 			b.Genome.Registers[reg]--
 			b.PointerJumpBy(2)
 			continue
 
-		case bot.OpCmpReg:
+		case core.OpCmpReg:
 			regA := b.CmdArg(1) % 4
 			regB := b.CmdArg(2) % 4
 			aVal := b.Genome.Registers[regA]
@@ -789,7 +788,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			continue
 
-		case bot.OpJumpIfZero:
+		case core.OpJumpIfZero:
 			reg := b.CmdArg(1) % 4
 			// fmt.Printf("I jump if reg %v is zero\n", reg)
 			jump := b.CmdArg(2)
@@ -800,7 +799,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			}
 			continue
 
-		case bot.OpSendSignal:
+		case core.OpSendSignal:
 			dir := b.CmdArgDir(1, pos)
 			sendPos := pos.AddPos(dir)
 			if util.OutOfBounds(sendPos) {
@@ -817,7 +816,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(2)
 			continue
 
-		case bot.OpCheckSignal:
+		case core.OpCheckSignal:
 			sigVal := b.Genome.Signal
 			b.Genome.Signal = 0
 			b.PointerJumpBy(sigVal + 1)
@@ -830,7 +829,7 @@ func (g *Game) botAction(pos board.Position, b *bot.Bot) {
 	}
 }
 
-func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) {
+func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	g.Board.MarkDirty(idx(oldPos))
 	newPos := oldPos.AddDir(b.Dir)
 
@@ -838,65 +837,78 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) {
 		b.CurrTask.MarkDone()
 		return
 	}
+
 	isTaskBasedMove := b.CurrTask != nil && b.CurrTask.Pos != b.Pos
 
 	if isTaskBasedMove {
 		fmt.Printf("tryMove. botPos: %v, target: %v, path: %v \n",
 			b.Pos, b.CurrTask.Pos, b.Path)
 
-		// next pos occupied with bot with task
 		if nextPos, ok := b.PeekNextPos(); ok {
-			nextBot := g.GetBot(nextPos)
-			if nextBot != nil && nextBot.HasUndoneTask() {
-				b.SwapTaskWith(nextBot)
+			if nb := g.GetBot(nextPos); nb != nil && nb.HasUndoneTask() {
+				b.SwapTaskWith(nb)
 				b.Path = g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-				nextBot.Path = g.calcPath(nextBot.Pos, nextBot.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+				nb.Path = g.calcPath(nb.Pos, nb.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
 
-				fmt.Printf("Swapped with bot at %v. My new target: %v, Their new target: %v\n", nextPos, b.CurrTask.Pos, nextBot.CurrTask.Pos)
-				fmt.Printf("My new path: %v, Their new path: %v\n", b.Path, nextBot.Path)
+				fmt.Printf("Swapped with bot at %v. My new target: %v, Their new target: %v\n", nextPos, b.CurrTask.Pos, nb.CurrTask.Pos)
+				fmt.Printf("My new path: %v, Their new path: %v\n", b.Path, nb.Path)
 
-				if nextBot.CurrTask != nil && nextPos == nextBot.CurrTask.Pos {
-					nextBot.CurrTask.MarkDone()
+				if nb.CurrTask != nil && nextPos == nb.CurrTask.Pos {
+					nb.CurrTask.MarkDone()
 				}
-				if b.CurrTask != nil && newPos == b.CurrTask.Pos {
+				if b.CurrTask != nil && nextPos == b.CurrTask.Pos {
 					b.CurrTask.MarkDone()
+				}
+				if !b.CurrTask.IsDone && len(b.Path) == 0 {
+					fmt.Printf("Bot at %v Unassigning task from self.\n", b.Pos)
+					b.UnassignTask()
+				}
+				if !nb.CurrTask.IsDone && len(nb.Path) == 0 {
+					fmt.Printf("Bot at %v Unassigning task from self.\n", nb.Pos)
+					nb.UnassignTask()
 				}
 				return
 			}
 		}
 
 		newPos = b.PopNextPos()
-
-		if nextBot := g.GetBot(newPos); nextBot != nil {
-			if nextBot.CurrTask != nil {
-				alternativePath := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-				fmt.Printf("I hit bot with done task at %v. Alternative Path: %v\n", newPos, alternativePath)
-				if len(alternativePath) == 0 {
+		if nb := g.GetBot(newPos); nb != nil {
+			if nb.CurrTask != nil {
+				alt := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+				fmt.Printf("I hit bot with done task at %v. Alternative Path: %v\n", newPos, alt)
+				if len(alt) == 0 {
 					return
 				}
-			} else if nextBot.CurrTask == nil {
-				if _, isBot := g.Board.At(newPos).(*bot.Bot); !isBot {
-					fmt.Printf("newPos %v is not empty. Occ: %T.\n", newPos, g.Board.At(newPos))
-					panic("please no")
-				}
-				fmt.Printf("tryMove Passing. botPos: %v, target: %v, path: %v \n",
-					b.Pos, b.CurrTask.Pos, b.Path)
+				nb.Path = alt
+				return
+			}
+			fmt.Printf("tryMove Passing. botPos: %v, target: %v, path: %v \n",
+				b.Pos, b.CurrTask.Pos, b.Path)
 
-				nextBot.CurrTask = b.CurrTask
-				nextBot.Path = b.Path
-				nextBot.CurrTask.Owner = nextBot
+			nb.CurrTask = b.CurrTask
+			nb.Path = b.Path
+			nb.CurrTask.Owner = nb
 
-				b.CurrTask = nil
-				b.Path = nil
-				if newPos == nextBot.CurrTask.Pos {
-					nextBot.CurrTask.MarkDone()
-				}
-
+			b.CurrTask = nil
+			b.Path = nil
+			if newPos == nb.CurrTask.Pos {
+				nb.CurrTask.MarkDone()
 			}
 		}
 	}
 
 	if !g.Board.IsEmpty(newPos) {
+		if isTaskBasedMove && b.CurrTask != nil {
+			fmt.Printf("newPos %v is not empty. Occ: %T.\n", newPos, g.Board.At(newPos))
+			newPath := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+			fmt.Printf("New path: %v\n", newPath)
+
+			b.Path = newPath
+			if len(b.Path) == 0 {
+				fmt.Printf("Bot at %v Unassigning task from self.\n", b.Pos)
+				b.UnassignTask()
+			}
+		}
 		return
 	}
 
@@ -926,15 +938,7 @@ func (g *Game) calcPath(botPos util.Position, targetPos util.Position, filter fu
 	return path
 }
 
-func (g *Game) botNb(pos util.Position, dir util.Direction) (*bot.Bot, util.Position) {
-	if util.OutOfBounds(pos) {
-		return nil, util.Position{}
-	}
-	botPos := pos.AddDir(dir)
-	return g.Bots[idx(botPos)], botPos
-}
-
-func (g *Game) grab(pos board.Position, b *bot.Bot) {
+func (g *Game) grab(pos core.Position, b *core.Bot) {
 	c := *g.config
 
 	// dir := util.PosClock[b.CmdArg(1)%8]
@@ -948,7 +952,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	// }
 
 	switch v := g.Board.At(grabPos).(type) {
-	case board.Building:
+	case core.Building:
 		if v.Owner == b {
 			return
 		}
@@ -958,7 +962,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(1)
 		b.Genome.NextArg = 1
 		return
-	case board.Spawner:
+	case core.Spawner:
 		if b.Inventory.Amount < c.SpawnerGrabCost {
 			return
 		}
@@ -973,7 +977,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(2)
 		b.Genome.NextArg = 2
 		return
-	case board.Farm:
+	case core.Farm:
 		if v.Owner != b {
 			b.Inventory.Amount = 0
 			g.Board.Clear(grabPos)
@@ -988,18 +992,18 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
 		return
-	case board.Food:
+	case core.Food:
 		b.Hp += c.FoodGrabHpGain
 		g.Board.Clear(grabPos)
 		return
-	case board.Poison:
+	case core.Poison:
 		b.Hp = 0
 		g.Board.Clear(pos)
 		g.Board.Clear(grabPos)
 		b.PointerJumpBy(4)
 		b.Genome.NextArg = 4
 		return
-	case board.Controller:
+	case core.Controller:
 		if !v.Owner.SameColony(b) {
 			// arg := b.CmdArg(1) % 2
 			// if arg == 0 {
@@ -1020,7 +1024,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(5)
 		b.Genome.NextArg = 5
 		return
-	case board.Resource:
+	case core.Resource:
 		// if b.Inventory.Amount > 10 {
 		// 	b.Hp -= 10
 		// }
@@ -1036,7 +1040,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(6)
 		b.Genome.NextArg = 6
 		return
-	case board.Mine:
+	case core.Mine:
 		// fmt.Println("MineMine")
 		if b.Hp < c.MineGrabHpCost {
 			return
@@ -1053,7 +1057,7 @@ func (g *Game) grab(pos board.Position, b *bot.Bot) {
 	}
 }
 
-func (g *Game) build(botPos board.Position, b *bot.Bot) {
+func (g *Game) build(botPos core.Position, b *core.Bot) {
 	c := g.config
 	dir := util.PosClock[b.CmdArg(1)%8]
 	buildPos := botPos.AddRowCol(dir[0], dir[1])
@@ -1062,15 +1066,15 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		return
 	}
 
-	buildTypes := bot.BuildTypesCount()
-	buildType := bot.BuildType(b.CmdArg(2) % buildTypes)
+	buildTypes := core.BuildTypesCount()
+	buildType := core.BuildType(b.CmdArg(2) % buildTypes)
 
 	switch buildType {
-	case bot.BuildWall:
+	case core.BuildWall:
 		// if b.Inventory.Amount < c.BuildingBuildCost {
 		// 	return
 		// }
-		g.Board.Set(buildPos, board.Building{
+		g.Board.Set(buildPos, core.Building{
 			Pos:   buildPos,
 			Owner: b,
 			Hp:    20,
@@ -1080,12 +1084,12 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(1)
 		b.Genome.NextArg = 1
 		return
-	case bot.BuildColonyFlag:
+	case core.BuildColonyFlag:
 		if b.Colony == nil || !b.ConnnectedToColony || b.Colony.FlagsCount() >= 3 {
 			b.PointerJumpBy(2)
 			return
 		}
-		flag := bot.ColonyFlag{
+		flag := core.ColonyFlag{
 			Pos:    buildPos,
 			Colony: b.Colony,
 		}
@@ -1093,7 +1097,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		b.Colony.AddFlag(&flag)
 		b.PointerJumpBy(1)
 		return
-	case bot.BuildSpawner:
+	case core.BuildSpawner:
 		b.PointerJumpBy(2)
 		return
 		// if b.HasSpawner {
@@ -1106,16 +1110,16 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		// })
 		// b.HasSpawner = true
 		// b.PointerJumpBy(2)
-	case bot.BuildController:
+	case core.BuildController:
 		if b.Colony != nil {
 			b.PointerJumpBy(6)
 			return
 		}
 
-		colony := bot.NewColony(buildPos)
+		colony := core.NewColony(buildPos)
 		colony.AddFamily(b)
 
-		g.Board.Set(buildPos, board.Controller{
+		g.Board.Set(buildPos, core.Controller{
 			Pos:         buildPos,
 			Owner:       b,
 			Colony:      &colony,
@@ -1127,12 +1131,12 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
 		return
-	case bot.BuildMine:
+	case core.BuildMine:
 		if b.Inventory.Amount < c.MineBuildCost {
 			b.PointerJumpBy(7)
 			return
 		}
-		g.Board.Set(buildPos, board.Mine{
+		g.Board.Set(buildPos, core.Mine{
 			Pos:    buildPos,
 			Owner:  b,
 			Amount: 0,
@@ -1141,7 +1145,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 		b.PointerJumpBy(4)
 		b.Genome.NextArg = 4
 		return
-	case bot.BuildFarm:
+	case core.BuildFarm:
 		if c.DisableFarms {
 			b.PointerJumpBy(9)
 			return
@@ -1150,7 +1154,7 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 			b.PointerJumpBy(8)
 			return
 		}
-		g.Board.Set(buildPos, board.Farm{
+		g.Board.Set(buildPos, core.Farm{
 			Pos:    buildPos,
 			Owner:  b,
 			Amount: c.FarmInitialAmount,
@@ -1163,17 +1167,17 @@ func (g *Game) build(botPos board.Position, b *bot.Bot) {
 	}
 }
 
-func (g *Game) GetBot(pos util.Position) *bot.Bot {
-	if !board.Inside(pos) {
+func (g *Game) GetBot(pos util.Position) *core.Bot {
+	if !core.Inside(pos) {
 		return nil
 	}
 	return g.Bots[idx(pos)]
 }
 
-func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
+func (g *Game) lookAround(botPos core.Position, b *core.Bot) {
 	lookPos := b.CmdArgDir(2, botPos)
 	switch v := g.Board.At(lookPos).(type) {
-	case *bot.Bot:
+	case *core.Bot:
 		other := g.Bots[idx(lookPos)]
 		if other != nil {
 			if b.IsBro(other) {
@@ -1185,31 +1189,31 @@ func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 			b.Genome.NextArg = 13
 			return
 		}
-	case board.Building:
+	case core.Building:
 		b.PointerJumpBy(4)
 		b.Genome.NextArg = 4
-	case board.Wall:
+	case core.Wall:
 		b.PointerJumpBy(8)
 		b.Genome.NextArg = 8
-	case board.Resource:
+	case core.Resource:
 		b.PointerJumpBy(11)
 		b.Genome.NextArg = 11
-	case board.Controller:
+	case core.Controller:
 		b.PointerJumpBy(50)
 		b.Genome.NextArg = 50
-	case board.Spawner:
+	case core.Spawner:
 		b.PointerJumpBy(61)
 		b.Genome.NextArg = 61
-	case board.Farm:
+	case core.Farm:
 		b.PointerJumpBy(7)
 		b.Genome.NextArg = 7
-	case board.Food:
+	case core.Food:
 		b.PointerJumpBy(9)
 		b.Genome.NextArg = 9
-	case board.Poison:
+	case core.Poison:
 		b.PointerJumpBy(14)
 		b.Genome.NextArg = 14
-	case board.Water:
+	case core.Water:
 		if b.Colony != nil && !b.Colony.KnowsWaterGroupId(v.GroupId) {
 			b.Colony.AddWaterPosition(lookPos, v.GroupId)
 		}
@@ -1219,7 +1223,7 @@ func (g *Game) lookAround(botPos board.Position, b *bot.Bot) {
 		// }
 		b.Genome.NextArg = 15
 		b.PointerJumpBy(15)
-	case board.Organics:
+	case core.Organics:
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
 	default:
