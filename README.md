@@ -1,5 +1,3 @@
-
-````markdown
 # 🧠 Bots Arena
 
 **Bots Arena** is an experimental OpenGL-based simulation and AI playground written in **Go**.  
