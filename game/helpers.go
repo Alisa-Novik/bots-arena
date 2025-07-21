@@ -16,6 +16,11 @@ func (g *Game) liveBotCount() int {
 	return n
 }
 
+func assert(cond bool, msg string) {
+	if !cond {
+		panic(msg)
+	}
+}
 // func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
 // 	t1 := util.Position{R: 15, C: 40}
 // 	if !b.Unloading {

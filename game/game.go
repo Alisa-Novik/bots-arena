@@ -89,8 +89,8 @@ func (g *Game) environmentActions() {
 }
 
 func (g *Game) killBot(b *bot.Bot, botIdx int) {
-	if b.PathToTaskStart != nil {
-		b.PathToTaskStart = nil
+	if b.Path != nil {
+		b.Path = nil
 	}
 	if b.CurrTask != nil {
 		b.CurrTask.Owner = nil
@@ -126,6 +126,17 @@ func (g *Game) isEmptyOrBotNoTask(p util.Position) bool {
 	}
 	b := g.Bots[idx(p)]
 	return g.Board.IsEmpty(p) || (b != nil && b.CurrTask == nil)
+}
+
+func (g *Game) isEmptyOrBotWithUndoneTask(p util.Position) bool {
+	if util.OutOfBounds(p) {
+		return false
+	}
+	if g.Board.IsEmpty(p) {
+		return true
+	}
+	b := g.Bots[idx(p)]
+	return b == nil || b.CurrTask == nil || !b.CurrTask.IsDone
 }
 
 func (g *Game) isEmptyOrBot(p util.Position) bool {
@@ -169,24 +180,50 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 
 	colony := ctrl.Colony
 
-	if len(colony.Members) > 10 && len(colony.WaterPositions) > 0 && len(colony.PathToWater) == 0 {
+	if len(colony.Members) > 10 && len(colony.WaterPositions) > 0 && len(colony.PathToWater) == 0 && !colony.HasTaskOfType(bot.ConnectToPosTask) {
 		task := colony.NewConnectionTask(colony.WaterPositions[0])
 		colony.AddTask(task)
 	}
 
 	for _, task := range ctrl.Colony.Tasks {
+		if b := task.Owner; b != nil {
+			b.Hp += 15
+			if !task.IsDone {
+				b.SetColor(util.CyanColor(), g.Board.MarkDirty)
+			} else {
+				b.SetColor(util.GreenColor(), g.Board.MarkDirty)
+			}
+		}
+
 		if task.IsDone {
 			continue
 		}
+
 		switch task.Type {
 		case bot.ConnectToPosTask:
 			g.handleCreateConnTask(task, ctrl)
 		case bot.MaintainConnectionTask:
-			if b := g.GetBot(task.Pos); b != nil {
-				b.ReassignTask(task)
-				task.IsDone = true
+			if task.Owner != nil {
+				continue
 			}
-			g.handleMaintainConnTask(colony, task)
+			task.Attempts++
+			if task.Attempts > 3 {
+				fmt.Println("Attempted to assign task >3 times..")
+			}
+			for _, b := range SortByDistance(colony.Members, task.Pos) {
+				if b.CurrTask != nil {
+					continue
+				}
+				path := g.calcPath(b.Pos, task.Pos, g.isEmptyOrBot)
+				// fmt.Printf("path %v, start %v, target %v\n", )
+				if len(path) == 0 {
+					continue
+				}
+				task.Owner = b
+				b.CurrTask = task
+				b.Path = path
+				break
+			}
 		}
 	}
 
@@ -213,44 +250,14 @@ func (g *Game) handleController(ctrl *board.Controller, pos util.Position) {
 		g.Board.MarkDirty(idx(pathPos))
 		g.Board.PathsToRenderR = append(g.Board.PathsToRenderR, pathPos)
 	}
-
-	for _, task := range colony.Tasks {
-		if task.Owner == nil || task.Type != bot.MaintainConnectionTask {
-			continue
-		}
-		b := task.Owner
-		b.Hp += 15
-
-		if task.IsDone {
-			b.SetColor(util.GreenColor(), g.Board.MarkDirty)
-		} else {
-			b.SetColor(util.CyanColor(), g.Board.MarkDirty)
-		}
-	}
-}
-
-func (g *Game) handleMaintainConnTask(colony *bot.Colony, task *bot.ColonyTask) {
-	for _, b := range SortByDistance(colony.Members, task.Pos) {
-		if b.CurrTask != nil || task.Owner != nil {
-			continue
-		}
-		path := util.FindPath(b.Pos, task.Pos, g.isEmptyOrBot)
-		if len(path) == 0 {
-			continue
-		}
-		b.PathToTaskStart = path
-		b.CurrTask = task
-		task.Owner = b
-		break
-	}
 }
 
 func (g *Game) handleCreateConnTask(task *bot.ColonyTask, ctrl *board.Controller) {
 	colony := ctrl.Colony
 	task.Attempts++
-	if task.Attempts > 3 {
+	if task.Attempts > 1 {
 		fmt.Printf("%v is unreachable to connect\n", task.Pos)
-		task.IsDone = true
+		task.MarkDone()
 		return
 	}
 	colony.PathToWater = util.FindPath(ctrl.Pos, task.Pos, g.isEmptyOrBot)
@@ -262,7 +269,7 @@ func (g *Game) handleCreateConnTask(task *bot.ColonyTask, ctrl *board.Controller
 	for _, pathPos := range colony.PathToWater {
 		colony.AddTask(colony.NewMaintainConnectionTask(pathPos))
 	}
-	task.IsDone = true
+	task.MarkDone()
 }
 
 func (g *Game) connectBots(currPos util.Position, visited map[*bot.Bot]struct{}, colony *bot.Colony) bool {
@@ -827,49 +834,64 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) {
 	g.Board.MarkDirty(idx(oldPos))
 	newPos := oldPos.AddDir(b.Dir)
 
-	if b.CurrTask != nil && len(b.PathToTaskStart) == 0 && !b.CurrTask.IsDone {
-		if b.CurrTask.Pos == b.Pos {
-			fmt.Printf("complete! I need to go from %v to %v following path %v\n", b.Pos, b.CurrTask.Pos, b.PathToTaskStart)
-			b.CurrTask.IsDone = true
-			return
-		}
-		fmt.Printf("ERROR! I need to go from %v to %v following path %v; ", b.Pos, b.CurrTask.Pos, b.PathToTaskStart)
-		fmt.Printf("Calculating new path...\n")
-		b.PathToTaskStart = util.FindPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBot)
-		// panic("bot with undone task and no path tries to move")
+	if b.CurrTask != nil && b.Pos == b.CurrTask.Pos {
+		b.CurrTask.MarkDone()
+		return
 	}
-	if b.CurrTask != nil && len(b.PathToTaskStart) != 0 {
-		fmt.Printf("I need to go from %v to %v following path %v\n", b.Pos, b.CurrTask.Pos, b.PathToTaskStart)
-		newPos = b.PathToTaskStart[0]
-		g.Board.MarkDirty(idx(newPos))
-		b.PathToTaskStart = b.PathToTaskStart[1:]
+	isTaskBasedMove := b.CurrTask != nil && b.CurrTask.Pos != b.Pos
+
+	if isTaskBasedMove {
+		fmt.Printf("tryMove. botPos: %v, target: %v, path: %v \n",
+			b.Pos, b.CurrTask.Pos, b.Path)
+
+		// next pos occupied with bot with task
+		if nextPos, ok := b.PeekNextPos(); ok {
+			nextBot := g.GetBot(nextPos)
+			if nextBot != nil && nextBot.HasUndoneTask() {
+				b.SwapTaskWith(nextBot)
+				b.Path = g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+				nextBot.Path = g.calcPath(nextBot.Pos, nextBot.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+
+				fmt.Printf("Swapped with bot at %v. My new target: %v, Their new target: %v\n", nextPos, b.CurrTask.Pos, nextBot.CurrTask.Pos)
+				fmt.Printf("My new path: %v, Their new path: %v\n", b.Path, nextBot.Path)
+
+				if nextBot.CurrTask != nil && nextPos == nextBot.CurrTask.Pos {
+					nextBot.CurrTask.MarkDone()
+				}
+				if b.CurrTask != nil && newPos == b.CurrTask.Pos {
+					b.CurrTask.MarkDone()
+				}
+				return
+			}
+		}
+
+		newPos = b.PopNextPos()
 
 		if nextBot := g.GetBot(newPos); nextBot != nil {
-			if nextBot.CurrTask == nil {
-				fmt.Printf("SWAP I need to go from %v to %v following path %v\n", b.Pos, b.CurrTask.Pos, b.PathToTaskStart)
-				fmt.Printf("SWAP I'm swapping task. I'm at %v, swapping with %v\n", oldPos, newPos)
+			if nextBot.CurrTask != nil {
+				alternativePath := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
+				fmt.Printf("I hit bot with done task at %v. Alternative Path: %v\n", newPos, alternativePath)
+				if len(alternativePath) == 0 {
+					return
+				}
+			} else if nextBot.CurrTask == nil {
+				if _, isBot := g.Board.At(newPos).(*bot.Bot); !isBot {
+					fmt.Printf("newPos %v is not empty. Occ: %T.\n", newPos, g.Board.At(newPos))
+					panic("please no")
+				}
+				fmt.Printf("tryMove Passing. botPos: %v, target: %v, path: %v \n",
+					b.Pos, b.CurrTask.Pos, b.Path)
+
 				nextBot.CurrTask = b.CurrTask
-				nextBot.PathToTaskStart = b.PathToTaskStart
+				nextBot.Path = b.Path
 				nextBot.CurrTask.Owner = nextBot
+
 				b.CurrTask = nil
-				b.PathToTaskStart = nil
-				return
-			} else if nextBot.CurrTask != nil {
-				taskNext := nextBot.CurrTask
-				nextBot.CurrTask = b.CurrTask
-				nextBot.CurrTask.Owner = nextBot
+				b.Path = nil
+				if newPos == nextBot.CurrTask.Pos {
+					nextBot.CurrTask.MarkDone()
+				}
 
-				b.CurrTask = taskNext
-				b.CurrTask.Owner = b
-
-				b.CurrTask.IsDone = false
-				nextBot.CurrTask.IsDone = false
-
-				nextBot.PathToTaskStart = b.PathToTaskStart
-				newPath := util.FindPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotNoTask)
-				fmt.Printf("new path to target %v: %v\n", b.CurrTask.Pos, newPath)
-				b.PathToTaskStart = newPath
-				return
 			}
 		}
 	}
@@ -877,6 +899,7 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) {
 	if !g.Board.IsEmpty(newPos) {
 		return
 	}
+
 	g.Bots[idx(oldPos)] = nil
 	g.Bots[idx(newPos)] = b
 
@@ -886,8 +909,21 @@ func (g *Game) tryMove(oldPos board.Position, b *bot.Bot) {
 	b.Pos = newPos
 
 	if b.CurrTask != nil && newPos == b.CurrTask.Pos {
-		b.CurrTask.IsDone = true
+		b.CurrTask.MarkDone()
 	}
+}
+
+func (g *Game) calcPath(botPos util.Position, targetPos util.Position, filter func(util.Position) bool) []util.Position {
+	path := util.FindPath(botPos, targetPos, filter)
+
+	if len(path) == 0 {
+		return path
+	}
+
+	assert(path[0] != botPos, "Current pos in path")
+	assert(path[len(path)-1] == targetPos, "No target in path")
+
+	return path
 }
 
 func (g *Game) botNb(pos util.Position, dir util.Direction) (*bot.Bot, util.Position) {

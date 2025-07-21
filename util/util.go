@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	ScaleFactor = 4
+	ScaleFactor = 7
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
 	Cells       = Rows * Cols

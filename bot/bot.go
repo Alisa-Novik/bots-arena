@@ -23,12 +23,27 @@ type Bot struct {
 	HasSpawner         bool
 	Pos                util.Position
 	CurrTask           *ColonyTask
-	PathToTaskStart    []util.Position
-	AttemptsToPassTask int
+	Path               []util.Position
 
 	hashLo, hashHi uint64
 	Unloading      bool
 	Usp            [2]int // unloading starting pos
+}
+
+func (b *Bot) SwapTaskWith(nextBot *Bot) {
+	taskNext := nextBot.CurrTask
+
+	nextBot.CurrTask = b.CurrTask
+	nextBot.CurrTask.Owner = nextBot
+
+	b.CurrTask = taskNext
+	b.CurrTask.Owner = b
+}
+
+func assert(cond bool, msg string) {
+	if !cond {
+		panic(msg)
+	}
 }
 
 func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
@@ -138,30 +153,51 @@ func NewColony(pos util.Position) Colony {
 		// Color:    util.RandomColor(),
 		Color:   util.RedColor(),
 		Members: make(map[*Bot]struct{}),
-
 		// WaterPositions: make([]util.Position, 10),
 		// WaterGroupIds:  make([]int, 10),
 	}
 }
 
-func (b *Bot) PassTaskTo(other *Bot) {
+func (b *Bot) PeekNextPos() (util.Position, bool) {
+	path := b.Path
+
+	if len(path) == 0 {
+		return util.Position{}, false
+	}
+
+	return path[0], true
 }
 
-func (c *Colony) HasTask(taskType ColonyTaskType) bool {
+func (b *Bot) HasDoneTask() bool {
+	return b.CurrTask != nil && b.CurrTask.IsDone
+}
+
+func (b *Bot) HasUndoneTask() bool {
+	return b.CurrTask != nil && !b.CurrTask.IsDone
+}
+
+func (b *Bot) PopNextPos() util.Position {
+	path := b.Path
+
+	assert(len(path) > 0, "Trying to pop from empty path")
+	assert(path[len(path)-1] == b.CurrTask.Pos, "No target in path")
+
+	pos := path[0]
+	b.Path = path[1:]
+	return pos
+}
+
+func (t *ColonyTask) MarkDone() {
+	t.IsDone = true
+}
+
+func (c *Colony) HasTaskOfType(taskType ColonyTaskType) bool {
 	for _, task := range c.Tasks {
-		if task.Type == FindWaterTask {
+		if task.Type == taskType {
 			return true
 		}
 	}
 	return false
-}
-
-func (b *Bot) ReassignTask(task *ColonyTask) {
-	if task.Owner != nil {
-		task.Owner.CurrTask = nil
-	}
-	task.Owner = b
-	b.CurrTask = task
 }
 
 func (c *Colony) NewMaintainConnectionTask(pos util.Position) *ColonyTask {

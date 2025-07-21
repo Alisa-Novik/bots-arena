@@ -124,7 +124,7 @@ func NewBoard() *Board {
 	initNeighbourTable()
 	return &Board{
 		grid:     make([]Occupant, Rows*Cols),
-		occupied: make([]bool, (Rows+1)*(Cols+1)),
+		occupied: make([]bool, Rows*Cols),
 		dirty:    make([]bool, Rows*Cols),
 		// colonyCells: make([]ColonyCell, Rows*Cols),
 	}

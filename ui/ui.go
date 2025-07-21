@@ -405,11 +405,11 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 				}
 				targetPos := util.NewPos(0, 0)
 				if b.CurrTask != nil {
-					targetPos = b.Pos
+					targetPos = b.CurrTask.Pos
 				}
 
 				fmt.Printf("Bot Pos: %v; Path: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
-					b.Pos, b.PathToTaskStart, b.CurrTask == nil, taskIsDone, targetPos)
+					b.Pos, b.Path, b.CurrTask == nil, taskIsDone, targetPos)
 			} else {
 				fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
 					util.PosOf(hoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
