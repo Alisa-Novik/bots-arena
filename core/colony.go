@@ -105,11 +105,11 @@ type ColonyTask struct {
 	Owner     *Bot
 	IsDone    bool
 	Pos       util.Position
-	expiresAt time.Time
+	ExpiresAt time.Time
 }
 
 func (t *ColonyTask) IsExpired(now time.Time) bool {
-	return t.expiresAt.Before(now)
+	return t.ExpiresAt.Before(now)
 }
 
 func (c *ColonyTask) HasOwner() bool {
@@ -137,8 +137,12 @@ func (c *Colony) NewTask(pos util.Position, taskType ColonyTaskType) *ColonyTask
 		Pos:       pos,
 		Type:      taskType,
 		Owner:     nil,
-		expiresAt: time.Now().Add(3 * time.Second),
+		ExpiresAt: CalcExpiresAt(),
 	}
+}
+
+func CalcExpiresAt() time.Time {
+	return time.Now().Add(3 * time.Second)
 }
 
 func (c *Colony) KnowsWaterGroupId(groupId int) bool {

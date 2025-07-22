@@ -93,14 +93,8 @@ func (parent *Bot) RemoveOffspring(offspring *Bot) {
 	delete(parent.Offsprings, offspring)
 }
 
-func (b *Bot) PeekNextPos() (util.Position, bool) {
-	path := b.Path
-
-	if len(path) == 0 {
-		return util.Position{}, false
-	}
-
-	return path[0], true
+func (b *Bot) PeekNextPos() util.Position {
+	return b.Path[0]
 }
 
 func (b *Bot) HasTask() bool {

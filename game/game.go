@@ -8,6 +8,7 @@ import (
 	"golab/core"
 	"golab/ui"
 	"golab/util"
+	"math"
 	"math/rand"
 	"slices"
 	"time"
@@ -103,6 +104,17 @@ func (g *Game) killBot(b *core.Bot, botIdx int) {
 	core.BotPool.Put(b)
 }
 
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func manhattan(a, b util.Position) int {
+	return abs(a.R-b.R) + abs(a.C-b.C)
+}
+
 func SortByDistance(members map[*core.Bot]struct{}, target util.Position) []*core.Bot {
 	bots := make([]*core.Bot, 0, len(members))
 	for bot := range members {
@@ -116,6 +128,21 @@ func SortByDistance(members map[*core.Bot]struct{}, target util.Position) []*cor
 	return bots
 }
 
+func nearestIdleBot(m map[*core.Bot]struct{}, target util.Position) *core.Bot {
+	var best *core.Bot
+	bestDist := math.MaxInt
+
+	for b := range m {
+		if b.HasTask() {
+			continue
+		}
+		d := manhattan(b.Pos, target) // |dx|+|dy|
+		if d < bestDist {
+			best, bestDist = b, d
+		}
+	}
+	return best
+}
 func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 	c := ctrl.Colony
 
@@ -162,22 +189,46 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 			}
 			g.handleCreateConnTask(task, ctrl)
 		case core.MaintainConnectionTask:
-			if task.IsDone || task.HasOwner() {
+			if task.IsDone {
 				continue
 			}
-			if task.IsExpired(time.Now()) {
-				task.Owner.UnassignTask()
-				c.AddTask(task)
-			}
-			for _, b := range SortByDistance(c.Members, task.Pos) {
-				if b.HasTask() {
-					continue
+			if bot := g.GetBot(task.Pos); bot != nil && !task.HasOwner() {
+				if prev := bot.CurrTask; prev != nil {
+					bot.UnassignTask()
+					prev.ExpiresAt = core.CalcExpiresAt()
+					prev.IsDone = false
+					c.AddTask(prev)
 				}
-				path := g.calcPath(b.Pos, task.Pos, g.Board.IsEmpty)
-				if len(path) != 0 {
-					b.AssignTask(task)
-					b.Path = path
-					break
+				task.ExpiresAt = core.CalcExpiresAt()
+				bot.AssignTask(task)
+				continue
+			}
+
+			if task.IsExpired(time.Now()) {
+				if task.Owner != nil {
+					task.Owner.UnassignTask()
+				}
+				task.ExpiresAt = core.CalcExpiresAt()
+				task.Attempts = 0
+				continue
+			}
+
+			if task.HasOwner() {
+				continue
+			}
+
+			b := nearestIdleBot(c.Members, task.Pos)
+			if b == nil {
+				continue
+			}
+			if path := g.calcPath(b.Pos, task.Pos, g.Board.IsEmpty); len(path) != 0 {
+				b.AssignTask(task)
+				b.Path = path
+			} else {
+				task.Attempts++
+				if task.Attempts > 3 {
+					task.ExpiresAt = core.CalcExpiresAt()
+					task.Attempts = 0
 				}
 			}
 		}
@@ -776,31 +827,36 @@ func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	newPos := oldPos.AddDir(b.Dir)
 
 	if b.HasTask() {
+		// fmt.Printf("Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
 		if b.Pos == b.CurrTask.Pos {
 			b.CurrTask.MarkDone()
 			return
 		}
-		newPos = b.PopNextPos()
+		newPos = b.PeekNextPos()
+		if g.Board.IsEmpty(newPos) {
+			// fmt.Printf("Popping. Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
+			b.PopNextPos()
+		}
 	}
 
 	if !g.Board.IsEmpty(newPos) {
 		return
 	}
 
+	b.Pos = newPos
+
 	g.Bots[idx(oldPos)] = nil
 	g.Bots[idx(newPos)] = b
 
 	g.Board.Set(newPos, b)
 	g.Board.Clear(oldPos)
-
-	b.Pos = newPos
-
-	if b.CurrTask != nil && newPos == b.CurrTask.Pos {
-		b.CurrTask.MarkDone()
-	}
 }
 
+var i = 0
+
 func (g *Game) calcPath(botPos util.Position, targetPos util.Position, filter func(util.Position) bool) []util.Position {
+	i++
+	fmt.Printf("i=%v\n", i)
 	path := util.FindPath(botPos, targetPos, filter)
 
 	if len(path) == 0 {
