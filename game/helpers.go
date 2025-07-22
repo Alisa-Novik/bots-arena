@@ -1,9 +1,8 @@
 package game
 
 import (
-// "golab/board"
-// "golab/bot"
-// "golab/util"
+	"golab/core"
+	"golab/util"
 )
 
 func (g *Game) liveBotCount() int {
@@ -21,6 +20,18 @@ func assert(cond bool, msg string) {
 		panic(msg)
 	}
 }
+
+func idx(p core.Position) int {
+	return util.Idx(p)
+}
+
+func (g *Game) GetBot(pos util.Position) *core.Bot {
+	if !core.Inside(pos) {
+		return nil
+	}
+	return g.Bots[idx(pos)]
+}
+
 // func (g *Game) unload(b bot.Bot, pos board.Position, newBots map[board.Position]bot.Bot) {
 // 	t1 := util.Position{R: 15, C: 40}
 // 	if !b.Unloading {

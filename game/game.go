@@ -18,17 +18,14 @@ type Game struct {
 	Bots          []*core.Bot
 	Colonies      []*core.Colony
 	InitialGenome *core.Genome
-	config        *conf.Config
-	State         *conf.GameState
+
+	config *conf.Config
+	State  *conf.GameState
 
 	// aux
 	maxHp             int
 	currGen           int
 	latestImprovement int
-}
-
-func idx(p core.Position) int {
-	return util.Idx(p)
 }
 
 func NewGame(config *conf.Config) *Game {
@@ -119,27 +116,6 @@ func SortByDistance(members map[*core.Bot]struct{}, target util.Position) []*cor
 	return bots
 }
 
-func (g *Game) isEmptyOrBotWithUndoneTask(p util.Position) bool {
-	if util.OutOfBounds(p) {
-		return false
-	}
-
-	b := g.Bots[idx(p)]
-
-	if g.Board.IsEmpty(p) && b == nil {
-		return true
-	}
-	return b != nil && b.HasUndoneTask()
-}
-
-func (g *Game) isEmptyOrBot(p util.Position) bool {
-	if util.OutOfBounds(p) {
-		return false
-	}
-	b := g.Bots[idx(p)]
-	return g.Board.IsEmpty(p) || b != nil
-}
-
 func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 	c := ctrl.Colony
 
@@ -158,56 +134,53 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		g.connectBots(pos.AddDir(d), map[*core.Bot]struct{}{}, ctrl.Colony)
 	}
 
+	for m := range c.Members {
+		c.HealMember(m, ctrl)
+
+		if task := m.CurrTask; task != nil {
+			m.Hp += 15
+			if !task.IsDone {
+				m.SetColor(util.CyanColor(), g.Board.MarkDirty)
+			} else {
+				m.SetColor(util.GreenColor(), g.Board.MarkDirty)
+			}
+		}
+	}
+
 	c.HealBotsInFlagRadius(5, g.calcHpChange())
 
-	// scheduler -> creates tasks to issue with pre-defined owners
-	tasks := scheduler.tasksToIssue()
-
 	if len(c.WaterPositions) > 0 && !c.HasTaskOfType(core.ConnectToPosTask) {
-		// task := c.NewConnectionTask(util.NewPos(0, 0))
 		task := c.NewConnectionTask(c.WaterPositions[0])
 		c.AddTask(task)
 	}
 
 	for _, task := range c.Tasks {
-		if b := task.Owner; b != nil {
-			b.Hp += 15
-			if !task.IsDone {
-				b.SetColor(util.CyanColor(), g.Board.MarkDirty)
-			} else {
-				b.SetColor(util.GreenColor(), g.Board.MarkDirty)
-			}
-		}
-
-		if task.IsDone {
-			continue
-		}
-
 		switch task.Type {
 		case core.ConnectToPosTask:
-			g.handleCreateConnTask(task, ctrl)
-		case core.MaintainConnectionTask:
-			if task.Owner != nil {
+			if task.IsDone {
 				continue
 			}
+			g.handleCreateConnTask(task, ctrl)
+		case core.MaintainConnectionTask:
+			if task.IsDone || task.HasOwner() {
+				continue
+			}
+			if task.IsExpired(time.Now()) {
+				task.Owner.UnassignTask()
+				c.AddTask(task)
+			}
 			for _, b := range SortByDistance(c.Members, task.Pos) {
-				if b.CurrTask != nil {
+				if b.HasTask() {
 					continue
 				}
-				path := g.calcPath(b.Pos, task.Pos, g.isEmptyOrBot)
-				if len(path) == 0 {
-					continue
+				path := g.calcPath(b.Pos, task.Pos, g.Board.IsEmpty)
+				if len(path) != 0 {
+					b.AssignTask(task)
+					b.Path = path
+					break
 				}
-				task.Owner = b
-				b.CurrTask = task
-				b.Path = path
-				break
 			}
 		}
-	}
-
-	for m := range c.Members {
-		c.HealMember(m, ctrl)
 	}
 }
 
@@ -215,7 +188,6 @@ func (g *Game) handleCreateConnTask(task *core.ColonyTask, ctrl *core.Controller
 	colony := ctrl.Colony
 	task.Attempts++
 	if task.Attempts > 1 {
-		fmt.Printf("%v is unreachable to connect\n", task.Pos)
 		task.MarkDone()
 		return
 	}
@@ -227,6 +199,8 @@ func (g *Game) handleCreateConnTask(task *core.ColonyTask, ctrl *core.Controller
 	colony.PathToWater = colony.PathToWater[:pathLen-1]
 	for _, pathPos := range colony.PathToWater {
 		colony.AddTask(colony.NewMaintainConnectionTask(pathPos))
+		g.Board.PathsToRenderR = append(g.Board.PathsToRenderR, pathPos)
+		g.Board.MarkDirty(idx(pathPos))
 	}
 	task.MarkDone()
 }
@@ -789,86 +763,27 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 	}
 }
 
+func (g *Game) isEmptyOrBot(p util.Position) bool {
+	if util.OutOfBounds(p) {
+		return false
+	}
+	b := g.Bots[idx(p)]
+	return g.Board.IsEmpty(p) || b != nil
+}
+
 func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	g.Board.MarkDirty(idx(oldPos))
 	newPos := oldPos.AddDir(b.Dir)
 
-	if b.CurrTask != nil && b.Pos == b.CurrTask.Pos {
-		b.CurrTask.MarkDone()
-		return
-	}
-
-	isTaskBasedMove := b.CurrTask != nil && b.CurrTask.Pos != b.Pos
-
-	if isTaskBasedMove {
-		fmt.Printf("tryMove. botPos: %v, target: %v, path: %v \n",
-			b.Pos, b.CurrTask.Pos, b.Path)
-
-		if nextPos, ok := b.PeekNextPos(); ok {
-			if nb := g.GetBot(nextPos); nb != nil && nb.HasUndoneTask() {
-				b.SwapTaskWith(nb)
-				b.Path = g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-				nb.Path = g.calcPath(nb.Pos, nb.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-
-				fmt.Printf("Swapped with bot at %v. My new target: %v, Their new target: %v\n", nextPos, b.CurrTask.Pos, nb.CurrTask.Pos)
-				fmt.Printf("My new path: %v, Their new path: %v\n", b.Path, nb.Path)
-
-				if nb.CurrTask != nil && nextPos == nb.CurrTask.Pos {
-					nb.CurrTask.MarkDone()
-				}
-				if b.CurrTask != nil && nextPos == b.CurrTask.Pos {
-					b.CurrTask.MarkDone()
-				}
-				if !b.CurrTask.IsDone && len(b.Path) == 0 {
-					fmt.Printf("Bot at %v Unassigning task from self.\n", b.Pos)
-					b.UnassignTask()
-				}
-				if !nb.CurrTask.IsDone && len(nb.Path) == 0 {
-					fmt.Printf("Bot at %v Unassigning task from self.\n", nb.Pos)
-					nb.UnassignTask()
-				}
-				return
-			}
+	if b.HasTask() {
+		if b.Pos == b.CurrTask.Pos {
+			b.CurrTask.MarkDone()
+			return
 		}
-
 		newPos = b.PopNextPos()
-		if nb := g.GetBot(newPos); nb != nil {
-			if nb.CurrTask != nil {
-				alt := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-				fmt.Printf("I hit bot with done task at %v. Alternative Path: %v\n", newPos, alt)
-				if len(alt) == 0 {
-					return
-				}
-				nb.Path = alt
-				return
-			}
-			fmt.Printf("tryMove Passing. botPos: %v, target: %v, path: %v \n",
-				b.Pos, b.CurrTask.Pos, b.Path)
-
-			nb.CurrTask = b.CurrTask
-			nb.Path = b.Path
-			nb.CurrTask.Owner = nb
-
-			b.CurrTask = nil
-			b.Path = nil
-			if newPos == nb.CurrTask.Pos {
-				nb.CurrTask.MarkDone()
-			}
-		}
 	}
 
 	if !g.Board.IsEmpty(newPos) {
-		if isTaskBasedMove && b.CurrTask != nil {
-			fmt.Printf("newPos %v is not empty. Occ: %T.\n", newPos, g.Board.At(newPos))
-			newPath := g.calcPath(b.Pos, b.CurrTask.Pos, g.isEmptyOrBotWithUndoneTask)
-			fmt.Printf("New path: %v\n", newPath)
-
-			b.Path = newPath
-			if len(b.Path) == 0 {
-				fmt.Printf("Bot at %v Unassigning task from self.\n", b.Pos)
-				b.UnassignTask()
-			}
-		}
 		return
 	}
 
@@ -1050,8 +965,7 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 			return
 		}
 		flag := core.ColonyFlag{
-			Pos:    buildPos,
-			Colony: b.Colony,
+			Pos: buildPos,
 		}
 		g.Board.Set(buildPos, flag)
 		b.Colony.AddFlag(&flag)
@@ -1076,13 +990,13 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 			return
 		}
 
-		colony := core.NewColony(buildPos)
-		colony.AddFamily(b)
+		cln := core.NewColony(buildPos)
+		cln.AddFamily(b)
 
 		g.Board.Set(buildPos, core.Controller{
 			Pos:         buildPos,
 			Owner:       b,
-			Colony:      &colony,
+			Colony:      &cln,
 			Amount:      c.ControllerInitialAmount,
 			WaterAmount: 0,
 		})
@@ -1125,13 +1039,6 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 		b.Genome.NextArg = 5
 		return
 	}
-}
-
-func (g *Game) GetBot(pos util.Position) *core.Bot {
-	if !core.Inside(pos) {
-		return nil
-	}
-	return g.Bots[idx(pos)]
 }
 
 func (g *Game) lookAround(botPos core.Position, b *core.Bot) {

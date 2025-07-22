@@ -3,70 +3,11 @@ package core
 import (
 	"golab/util"
 	"slices"
+	"time"
 )
-
-type ColonyMarkerType int
-
-const (
-	ResourceMarker ColonyMarkerType = iota
-	WaterMarker
-)
-
-type ColonyMarker struct {
-	Colony *Colony
-	Pos    util.Position
-	Type   ColonyMarkerType
-}
-
-type ColonyTaskType int
-
-func (t ColonyTaskType) String() string {
-	switch t {
-	case MaintainConnectionTask:
-		return "MaintainConnectionTask"
-	case ConnectToPosTask:
-		return "ConnectToPosTask"
-	case FindWaterTask:
-		return "FindWaterTask"
-	}
-	return "UnknownTaskType"
-}
-
-const (
-	FindWaterTask ColonyTaskType = iota
-	ConnectToPosTask
-	MaintainConnectionTask
-)
-
-type ColonyTask struct {
-	Colony   *Colony
-	Type     ColonyTaskType
-	Attempts int
-	Owner    *Bot
-	IsDone   bool
-	Pos      util.Position
-}
-
-type ColonyFlag struct {
-	Colony *Colony
-	Pos    util.Position
-}
-
-type Colony struct {
-	Center         util.Position
-	Members        map[*Bot]struct{}
-	HasWater       bool
-	Flags          []*ColonyFlag
-	Markers        []*ColonyMarker
-	Tasks          []*ColonyTask
-	Color          [3]float32
-	PathToWater    []util.Position
-	WaterPositions []util.Position
-	WaterGroupIds  []int
-}
 
 type Controller struct {
-	Pos         Position
+	Pos         util.Position
 	Colony      *Colony
 	Owner       *Bot
 	Amount      int
@@ -92,7 +33,7 @@ func (c *Colony) HealMember(m *Bot, ctrl *Controller) {
 }
 
 func (c *Colony) HealBotsInFlagRadius(radius, hpChange int) {
-	for m, _ := range c.Members {
+	for m := range c.Members {
 		for _, f := range c.Flags {
 			if m.Pos.InRadius(f.Pos, radius) {
 				m.Hp += hpChange
@@ -113,17 +54,74 @@ func NewColony(pos util.Position) Colony {
 	}
 }
 
+type ColonyMarkerType int
+
+type Colony struct {
+	Center         util.Position
+	Members        map[*Bot]struct{}
+	HasWater       bool
+	Flags          []*ColonyFlag
+	Markers        []*ColonyMarker
+	Tasks          []*ColonyTask
+	Color          [3]float32
+	PathToWater    []util.Position
+	WaterPositions []util.Position
+	WaterGroupIds  []int
+}
+
+const (
+	ResourceMarker ColonyMarkerType = iota
+	WaterMarker
+)
+
+type ColonyMarker struct {
+	Pos  util.Position
+	Type ColonyMarkerType
+}
+
+type ColonyTaskType int
+
+func (t ColonyTaskType) String() string {
+	switch t {
+	case MaintainConnectionTask:
+		return "MaintainConnectionTask"
+	case ConnectToPosTask:
+		return "ConnectToPosTask"
+	case FindWaterTask:
+		return "FindWaterTask"
+	}
+	return "UnknownTaskType"
+}
+
+const (
+	FindWaterTask ColonyTaskType = iota
+	ConnectToPosTask
+	MaintainConnectionTask
+)
+
+type ColonyTask struct {
+	Type      ColonyTaskType
+	Attempts  int
+	Owner     *Bot
+	IsDone    bool
+	Pos       util.Position
+	expiresAt time.Time
+}
+
+func (t *ColonyTask) IsExpired(now time.Time) bool {
+	return t.expiresAt.Before(now)
+}
+
+func (c *ColonyTask) HasOwner() bool {
+	return c.Owner != nil
+}
+
 func (t *ColonyTask) MarkDone() {
 	t.IsDone = true
 }
 
-func (c *Colony) HasTaskOfType(taskType ColonyTaskType) bool {
-	for _, task := range c.Tasks {
-		if task.Type == taskType {
-			return true
-		}
-	}
-	return false
+type ColonyFlag struct {
+	Pos util.Position
 }
 
 func (c *Colony) NewMaintainConnectionTask(pos util.Position) *ColonyTask {
@@ -136,18 +134,10 @@ func (c *Colony) NewConnectionTask(pos util.Position) *ColonyTask {
 
 func (c *Colony) NewTask(pos util.Position, taskType ColonyTaskType) *ColonyTask {
 	return &ColonyTask{
-		Colony: c,
-		Pos:    pos,
-		Type:   taskType,
-		Owner:  nil,
-	}
-}
-
-func (c *Colony) NewMarker(pos util.Position, markerType ColonyMarkerType) *ColonyMarker {
-	return &ColonyMarker{
-		Pos:    pos,
-		Type:   markerType,
-		Colony: c,
+		Pos:       pos,
+		Type:      taskType,
+		Owner:     nil,
+		expiresAt: time.Now().Add(3 * time.Second),
 	}
 }
 
@@ -191,4 +181,13 @@ func (c *Colony) AddMember(offspring *Bot) {
 
 func (c *Colony) FlagsCount() int {
 	return len(c.Flags)
+}
+
+func (c *Colony) HasTaskOfType(taskType ColonyTaskType) bool {
+	for _, task := range c.Tasks {
+		if task.Type == taskType {
+			return true
+		}
+	}
+	return false
 }

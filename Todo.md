@@ -19,3 +19,6 @@ to recycle extra bots into inventory amount.
 4) Whenever colony has a Windmill and water it can build Mine and issue "mine" tasks within limit.
 It will either decide to assign owners to the task or bots will pick it up on their turn.
 Water + Resources -> Farms
+________
+idea -> idempotent priority based coloring. 
+Coloring based on colony membership has more priority than consumptuion based

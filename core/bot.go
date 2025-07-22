@@ -69,22 +69,20 @@ func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
 	markDirty(util.Idx(b.Pos))
 }
 
+func (b *Bot) AssignTask(task *ColonyTask) {
+	assert(!b.HasTask(), "Bot already has a task.")
+	assert(!task.HasOwner(), "Task already has an owner.")
+
+	b.CurrTask = task
+	b.CurrTask.Owner = b
+}
+
 func (b *Bot) UnassignTask() {
 	assert(b.CurrTask != nil, "No task to unassign")
 
 	b.CurrTask.Owner = nil
 	b.CurrTask = nil
 	b.Path = nil
-}
-
-func (b *Bot) SwapTaskWith(nextBot *Bot) {
-	taskNext := nextBot.CurrTask
-
-	nextBot.CurrTask = b.CurrTask
-	nextBot.CurrTask.Owner = nextBot
-
-	b.CurrTask = taskNext
-	b.CurrTask.Owner = b
 }
 
 func (parent *Bot) AddOffspring(offspring *Bot) {
@@ -103,6 +101,10 @@ func (b *Bot) PeekNextPos() (util.Position, bool) {
 	}
 
 	return path[0], true
+}
+
+func (b *Bot) HasTask() bool {
+	return b.CurrTask != nil
 }
 
 func (b *Bot) HasDoneTask() bool {
