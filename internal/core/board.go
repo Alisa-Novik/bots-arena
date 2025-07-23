@@ -1,7 +1,7 @@
 package core
 
 import (
-	"golab/util"
+	"golab/internal/util"
 	"golang.org/x/exp/rand"
 )
 
@@ -56,6 +56,7 @@ type Board struct {
 	grid     []Occupant
 	occupied []bool
 	dirty    []bool
+	Bots     []*Bot
 	// colonyCells []ColonyCell
 	patch []int
 }
@@ -117,6 +118,7 @@ func NewBoard() *Board {
 		grid:     make([]Occupant, Rows*Cols),
 		occupied: make([]bool, Rows*Cols),
 		dirty:    make([]bool, Rows*Cols),
+		Bots:     make([]*Bot, util.Cells),
 	}
 }
 
@@ -218,4 +220,25 @@ func (b *Board) IsWall(pos Position) bool {
 		return true
 	}
 	return pos.R == 0 || pos.R == Rows-1
+}
+
+func (b *Board) GetBot(pos util.Position) *Bot {
+	if !Inside(pos) {
+		return nil
+	}
+	return b.Bots[idx(pos)]
+}
+
+func (b *Board) IsSurrounded(bp util.Position) bool {
+	for _, dir := range Dirs {
+		dPos := bp.AddDir(dir)
+		if b.GetBot(dPos) == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *Board) IsEmptyOrBot(p util.Position) bool {
+	return !util.OutOfBounds(p) && (b.IsEmpty(p) || b.GetBot(p) != nil)
 }

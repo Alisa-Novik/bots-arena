@@ -1,7 +1,7 @@
 package core
 
 import (
-	"golab/util"
+	"golab/internal/util"
 	"slices"
 	"time"
 )
@@ -15,13 +15,15 @@ type Controller struct {
 }
 
 type Colony struct {
-	Center             util.Position
-	Members            []*Bot
-	HasWater           bool
-	Flags              []*ColonyFlag
-	Markers            []*ColonyMarker
-	Tasks              []*ColonyTask
-	Color              [3]float32
+	Center   util.Position
+	Members  []*Bot
+	HasWater bool
+	Flags    []*ColonyFlag
+	Markers  []*ColonyMarker
+	Tasks    []*ColonyTask
+	Color    [3]float32
+
+	FlowFieldToWater   []util.Position
 	PathToWater        []util.Position
 	WaterPositions     []util.Position
 	WaterGroupIds      []int

@@ -2,9 +2,9 @@ package ui
 
 import (
 	"fmt"
-	"golab/config"
-	"golab/core"
-	"golab/util"
+	"golab/internal/config"
+	"golab/internal/core"
+	"golab/internal/util"
 	"image"
 	"os"
 	"slices"

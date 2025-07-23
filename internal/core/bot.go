@@ -1,7 +1,7 @@
 package core
 
 import (
-	"golab/util"
+	"golab/internal/util"
 	"math/rand"
 	"sync"
 	"time"

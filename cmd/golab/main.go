@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
-	"golab/config"
-	"golab/game"
-	"golab/ui"
+	"golab/internal/config"
+	"golab/internal/game"
+	"golab/internal/ui"
 	"os"
 	"os/signal"
 	"runtime"
