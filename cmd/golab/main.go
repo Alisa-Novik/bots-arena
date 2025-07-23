@@ -21,10 +21,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := pprof.StartCPUProfile(f); err != nil {
-		panic(err)
-	}
-
 	// ensure we flush even on Ctrl-C
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)

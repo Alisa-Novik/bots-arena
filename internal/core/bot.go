@@ -231,20 +231,7 @@ var (
 	Left  = Direction{-1, 0}
 )
 
-var Opposite = map[Direction]Direction{
-	Up:    Down,
-	Down:  Up,
-	Right: Left,
-	Left:  Right,
-}
-
 var Dirs = []Direction{Up, Right, Down, Left}
-var DirIdx = map[Direction]int{
-	Up:    0,
-	Right: 1,
-	Down:  2,
-	Left:  3,
-}
 
 func RandomDir() Direction {
 	return Dirs[rand.Intn(4)]

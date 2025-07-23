@@ -23,7 +23,7 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 			return
 		}
 
-		c.PathToWater = pathfinding.CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
+		c.PathToWater = CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
 		pathLen := len(c.PathToWater)
 		if pathLen == 0 {
 			return
@@ -31,7 +31,6 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		// remove water tile itself
 		c.PathToWater = c.PathToWater[:pathLen-1]
 
-		c.FlowFieldToWater
 		for _, pathPos := range c.PathToWater {
 			c.AddTask(c.NewMaintainConnectionTask(pathPos))
 			brd.PathsToRenderR = append(brd.PathsToRenderR, pathPos)
@@ -73,7 +72,7 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 			if b.HasTask() || b.HasCooldown(now) {
 				continue
 			}
-			path := pathfinding.CalcPath(b.Pos, task.Pos, brd.IsEmpty, brd.IsSurrounded)
+			path := CalcPath(b.Pos, task.Pos, brd.IsEmpty, brd.IsSurrounded)
 			if len(path) == 0 {
 				b.StartCooldown(now)
 				continue

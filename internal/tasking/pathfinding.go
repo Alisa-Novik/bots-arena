@@ -79,10 +79,4 @@ func findPath(start, end Position, passable func(Position) bool) []Position {
 	return nil
 }
 
-func assert(cond bool, msg string) {
-	if !cond {
-		panic(msg)
-	}
-}
-
 type Position = util.Position
