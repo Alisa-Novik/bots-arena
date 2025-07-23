@@ -283,9 +283,9 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, c)
 				continue
 			}
-			if b := g.Board.Bots[idx(pos)]; b != nil {
+			if b := oldBoard.Bots[idx(pos)]; b != nil {
+				g.Board.Bots[idx(pos)] = b
 				g.Board.Set(pos, b)
-				continue
 			}
 			if util.RollChanceOf(1000, g.config.PoisonChance) {
 				g.Board.Set(pos, core.Poison{Pos: pos})
@@ -1027,12 +1027,6 @@ func (g *Game) liveBotCount() int {
 		}
 	}
 	return n
-}
-
-func assert(cond bool, msg string) {
-	if !cond {
-		panic(msg)
-	}
 }
 
 func idx(p core.Position) int {
