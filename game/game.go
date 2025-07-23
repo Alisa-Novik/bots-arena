@@ -1,16 +1,14 @@
 package game
 
 import (
-	"cmp"
 	"fmt"
 	"golab/config"
 	conf "golab/config"
 	"golab/core"
 	"golab/ui"
 	"golab/util"
-	"math"
 	"math/rand"
-	"slices"
+	"sort"
 	"time"
 )
 
@@ -69,6 +67,7 @@ func (g *Game) environmentActions() {
 			case core.Controller:
 				g.handleController(&v, pos)
 				g.Board.Set(pos, v)
+				continue
 			case core.Farm:
 				if v.Amount <= 0 {
 					continue
@@ -80,6 +79,7 @@ func (g *Game) environmentActions() {
 				g.Board.Set(foodPos, core.Food{Pos: foodPos, Amount: 1})
 				v.Amount--
 				g.Board.Set(pos, v)
+				continue
 			}
 		}
 	}
@@ -104,50 +104,60 @@ func (g *Game) killBot(b *core.Bot, botIdx int) {
 	core.BotPool.Put(b)
 }
 
-func abs(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
-}
-
-func manhattan(a, b util.Position) int {
-	return abs(a.R-b.R) + abs(a.C-b.C)
-}
-
-func SortByDistance(members map[*core.Bot]struct{}, target util.Position) []*core.Bot {
-	bots := make([]*core.Bot, 0, len(members))
-	for bot := range members {
-		bots = append(bots, bot)
+func SortedByDist(tasks []*core.ColonyTask, target util.Position) []*core.ColonyTask {
+	type pair struct {
+		t    *core.ColonyTask
+		dist int
 	}
 
-	slices.SortFunc(bots, func(a, b *core.Bot) int {
-		return cmp.Compare(util.CalcDistance(a.Pos, target), util.CalcDistance(b.Pos, target))
-	})
+	pairs := make([]pair, 0, len(tasks))
+	for _, b := range tasks {
+		assert(b != nil, "nil in task list")
+		dr := b.Pos.R - target.R
+		dc := b.Pos.C - target.C
+		pairs = append(pairs, pair{t: b, dist: dr*dr + dc*dc})
+	}
 
-	return bots
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].dist < pairs[j].dist })
+
+	out := make([]*core.ColonyTask, len(pairs))
+	for i := range pairs {
+		out[i] = pairs[i].t
+	}
+	return out
 }
 
-func nearestIdleBot(m map[*core.Bot]struct{}, target util.Position) *core.Bot {
-	var best *core.Bot
-	bestDist := math.MaxInt
+func SortedFreeBots(members []*core.Bot, target util.Position, now time.Time) []*core.Bot {
+	type pair struct {
+		b    *core.Bot
+		dist int
+	}
 
-	for b := range m {
-		if b.HasTask() {
+	pairs := make([]pair, 0, len(members))
+	for _, b := range members {
+		if b == nil || b.HasTask() || b.HasCooldown(now) {
 			continue
 		}
-		d := manhattan(b.Pos, target) // |dx|+|dy|
-		if d < bestDist {
-			best, bestDist = b, d
-		}
+		dr := b.Pos.R - target.R
+		dc := b.Pos.C - target.C
+		pairs = append(pairs, pair{b: b, dist: dr*dr + dc*dc})
 	}
-	return best
+
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].dist < pairs[j].dist })
+
+	out := make([]*core.Bot, len(pairs))
+	for i := range pairs {
+		out[i] = pairs[i].b
+	}
+	return out
 }
+
 func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 	c := ctrl.Colony
+	now := time.Now()
 
 	if ctrl.Owner == nil {
-		for m := range c.Members {
+		for _, m := range c.Members {
 			m.DisconnectFromColony()
 		}
 		for _, f := range c.Flags {
@@ -161,11 +171,11 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		g.connectBots(pos.AddDir(d), map[*core.Bot]struct{}{}, ctrl.Colony)
 	}
 
-	for m := range c.Members {
+	for _, m := range c.Members {
 		c.HealMember(m, ctrl)
 
 		if task := m.CurrTask; task != nil {
-			m.Hp += 15
+			m.Hp += 1
 			if !task.IsDone {
 				m.SetColor(util.CyanColor(), g.Board.MarkDirty)
 			} else {
@@ -178,59 +188,56 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 
 	if len(c.WaterPositions) > 0 && !c.HasTaskOfType(core.ConnectToPosTask) {
 		task := c.NewConnectionTask(c.WaterPositions[0])
+		// task := c.NewConnectionTask(util.NewPos(1, 1))
 		c.AddTask(task)
 	}
 
 	for _, task := range c.Tasks {
-		switch task.Type {
-		case core.ConnectToPosTask:
-			if task.IsDone {
+		if task.Type != core.ConnectToPosTask || task.IsDone {
+			continue
+		}
+		g.handleCreateConnTask(task, ctrl)
+		continue
+	}
+	for _, task := range SortedByDist(c.Tasks, ctrl.Pos) {
+		if task.Type != core.MaintainConnectionTask || task.IsDone {
+			continue
+		}
+		if b := g.GetBot(task.Pos); b != nil {
+			if task.HasOwner() || b.Colony != c {
 				continue
 			}
-			g.handleCreateConnTask(task, ctrl)
-		case core.MaintainConnectionTask:
-			if task.IsDone {
+			if old := b.CurrTask; old != nil {
+				b.UnassignTask()
+			}
+			b.AssignTask(task)
+			b.Path = nil
+			b.CurrTask.MarkDone()
+			continue
+		}
+		if task.HasOwner() && task.IsExpired(now) {
+			task.Owner.StartCooldown(now)
+			task.Owner.UnassignTask()
+			continue
+		}
+		if task.HasOwner() || c.HasNoFreeMembers() {
+			continue
+		}
+		if ctrl.Colony.AssignedUndoneTasksCount() > 10 {
+			continue
+		}
+		for _, b := range SortedFreeBots(c.Members, task.Pos, now) {
+			if b.HasTask() || b.HasCooldown(now) {
 				continue
 			}
-			if bot := g.GetBot(task.Pos); bot != nil && !task.HasOwner() {
-				if prev := bot.CurrTask; prev != nil {
-					bot.UnassignTask()
-					prev.ExpiresAt = core.CalcExpiresAt()
-					prev.IsDone = false
-					c.AddTask(prev)
-				}
-				task.ExpiresAt = core.CalcExpiresAt()
-				bot.AssignTask(task)
+			path := g.calcPath(b.Pos, task.Pos, g.Board.IsEmpty)
+			if len(path) == 0 {
+				b.StartCooldown(now)
 				continue
 			}
-
-			if task.IsExpired(time.Now()) {
-				if task.Owner != nil {
-					task.Owner.UnassignTask()
-				}
-				task.ExpiresAt = core.CalcExpiresAt()
-				task.Attempts = 0
-				continue
-			}
-
-			if task.HasOwner() {
-				continue
-			}
-
-			b := nearestIdleBot(c.Members, task.Pos)
-			if b == nil {
-				continue
-			}
-			if path := g.calcPath(b.Pos, task.Pos, g.Board.IsEmpty); len(path) != 0 {
-				b.AssignTask(task)
-				b.Path = path
-			} else {
-				task.Attempts++
-				if task.Attempts > 3 {
-					task.ExpiresAt = core.CalcExpiresAt()
-					task.Attempts = 0
-				}
-			}
+			b.AssignTask(task)
+			b.Path = path
+			break
 		}
 	}
 }
@@ -456,13 +463,13 @@ func (g *Game) botsActions() {
 func (g *Game) calcHpChange() int {
 	var hpChange int
 	if g.config.LiveBots > 20000 {
-		hpChange = 5
+		hpChange = 15
 	} else if g.config.LiveBots > 15000 {
-		hpChange = 3
+		hpChange = 13
 	} else if g.config.LiveBots > 10000 {
-		hpChange = 3
+		hpChange = 13
 	} else if g.config.LiveBots > 5000 {
-		hpChange = 3
+		hpChange = 13
 	} else if g.config.LiveBots > 3000 {
 		hpChange = 2
 	} else if g.config.LiveBots > 1000 {
@@ -832,10 +839,9 @@ func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 			b.CurrTask.MarkDone()
 			return
 		}
-		newPos = b.PeekNextPos()
-		if g.Board.IsEmpty(newPos) {
+		if g.Board.IsEmpty(b.PeekNextPos()) {
 			// fmt.Printf("Popping. Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
-			b.PopNextPos()
+			newPos = b.PopNextPos()
 		}
 	}
 
@@ -852,19 +858,30 @@ func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	g.Board.Clear(oldPos)
 }
 
+func (g *Game) isSurrounded(bp util.Position) bool {
+	for _, dir := range core.Dirs {
+		dPos := bp.AddDir(dir)
+		if g.GetBot(dPos) == nil {
+			return false
+		}
+	}
+	return true
+}
+
 var i = 0
 
 func (g *Game) calcPath(botPos util.Position, targetPos util.Position, filter func(util.Position) bool) []util.Position {
+	if g.isSurrounded(botPos) {
+		return nil
+	}
 	i++
-	fmt.Printf("i=%v\n", i)
+	fmt.Printf("PathCalc counter: %v \n", i)
 	path := util.FindPath(botPos, targetPos, filter)
 
-	if len(path) == 0 {
-		return path
+	if len(path) != 0 {
+		assert(path[0] != botPos, "Current pos in path")
+		assert(path[len(path)-1] == targetPos, "No target in path")
 	}
-
-	assert(path[0] != botPos, "Current pos in path")
-	assert(path[len(path)-1] == targetPos, "No target in path")
 
 	return path
 }

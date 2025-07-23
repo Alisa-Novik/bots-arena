@@ -22,3 +22,11 @@ Water + Resources -> Farms
 ________
 idea -> idempotent priority based coloring. 
 Coloring based on colony membership has more priority than consumptuion based
+ 
+Colony connection is broken
+it sets 1) bot.Colony = nil and never connnects it back again. 
+Additionnaly there is not distinction between colonies
+
+A lot of stuff is very broken actually. I should go back and fix them after pathfinding in good state.
+I need to mark everything I'm finding with todos or leave notes
+

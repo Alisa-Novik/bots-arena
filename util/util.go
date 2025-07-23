@@ -1,6 +1,7 @@
 package util
 
 import (
+	"container/heap"
 	"math"
 	"math/rand"
 )
@@ -80,6 +81,12 @@ func (p Position) InRadius(center Position, radius int) bool {
 	return dr <= radius && dc <= radius
 }
 
+func (p Position) SortByDist(dir Direction) Position {
+	nr := p.R + dir[1]
+	nc := (p.C + dir[0] + Cols) % Cols
+	return Position{R: nr, C: nc}
+}
+
 func (p Position) AddDir(dir Direction) Position {
 	nr := p.R + dir[1]
 	nc := (p.C + dir[0] + Cols) % Cols
@@ -117,34 +124,60 @@ var PosClock = [8][2]int{
 	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
 }
 
+type node struct {
+	p Position
+	f int
+	g int
+	i int
+}
+type hp []node
+
+func (h hp) Len() int           { return len(h) }
+func (h hp) Less(i, j int) bool { return h[i].f < h[j].f }
+func (h hp) Swap(i, j int)      { h[i], h[j] = h[j], h[i]; h[i].i, h[j].i = i, j }
+func (h *hp) Push(x any)        { *h = append(*h, x.(node)) }
+func (h *hp) Pop() any          { n := len(*h) - 1; x := (*h)[n]; *h = (*h)[:n]; return x }
+
+var i = 0
+
 func FindPath(start, end Position, passable func(Position) bool) []Position {
+	// i++
+	// fmt.Println(i)
 	if start == end {
 		return nil
 	}
+	h := func(a, b Position) int { return abs(a.R-b.R) + abs(a.C-b.C) }
 
+	open := &hp{{p: start, g: 0, f: h(start, end)}}
+	heap.Init(open)
+	gScore := map[Position]int{start: 0}
 	prev := make(map[Position]Position)
-	visited := make(map[Position]struct{})
-	queue := []Position{start}
-	visited[start] = struct{}{}
+	closed := make(map[Position]struct{})
 
-	for len(queue) > 0 {
-		curr := queue[0]
-		queue = queue[1:]
+	for open.Len() > 0 {
+		curr := heap.Pop(open).(node)
+		if curr.p == end {
+			var path []Position
+			for p := end; p != start; p = prev[p] {
+				path = append([]Position{p}, path...)
+			}
+			return path
+		}
+		closed[curr.p] = struct{}{}
 		for _, d := range PosCross {
-			next := curr.AddRowCol(d[0], d[1])
-			if _, seen := visited[next]; seen || (!passable(next) && next != end) {
+			next := curr.p.AddRowCol(d[0], d[1])
+			if next != end && !passable(next) {
 				continue
 			}
-			prev[next] = curr
-			if next == end {
-				var path []Position
-				for p := end; p != start; p = prev[p] {
-					path = append([]Position{p}, path...)
-				}
-				return path
+			if _, seen := closed[next]; seen {
+				continue
 			}
-			visited[next] = struct{}{}
-			queue = append(queue, next)
+			gNext := curr.g + 1
+			if gOld, ok := gScore[next]; !ok || gNext < gOld {
+				gScore[next] = gNext
+				prev[next] = curr.p
+				heap.Push(open, node{p: next, g: gNext, f: gNext + h(next, end)})
+			}
 		}
 	}
 	return nil

@@ -4,6 +4,7 @@ import (
 	"golab/util"
 	"math/rand"
 	"sync"
+	"time"
 )
 
 var BotPool = sync.Pool{
@@ -29,15 +30,24 @@ type Bot struct {
 	Pos                util.Position
 	CurrTask           *ColonyTask
 	Path               []util.Position
+	CooldownUntil      time.Time
 
 	hashLo, hashHi uint64
 	Unloading      bool
 	Usp            [2]int // unloading starting pos
 }
 
+func (m *Bot) HasCooldown(now time.Time) bool {
+	return now.Before(m.CooldownUntil)
+}
+
+func (m *Bot) StartCooldown(now time.Time) {
+	m.CooldownUntil = now.Add(50 * time.Second)
+}
+
 func (m *Bot) DisconnectFromColony() {
 	m.ConnnectedToColony = false
-	m.Colony = nil
+	// m.Colony = nil
 	if m.CurrTask != nil {
 		m.UnassignTask()
 	}
@@ -70,19 +80,25 @@ func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
 }
 
 func (b *Bot) AssignTask(task *ColonyTask) {
+	assert(b.Colony != nil, "Bot doesn't have a colony.")
 	assert(!b.HasTask(), "Bot already has a task.")
 	assert(!task.HasOwner(), "Task already has an owner.")
 
 	b.CurrTask = task
 	b.CurrTask.Owner = b
+	task.ExpiresAt = CalcExpiresAt()
+	b.Colony.AssignedTasksCount++
 }
 
 func (b *Bot) UnassignTask() {
 	assert(b.CurrTask != nil, "No task to unassign")
 
+	b.CurrTask.ExpiresAt = CalcExpiresAt()
+
 	b.CurrTask.Owner = nil
 	b.CurrTask = nil
 	b.Path = nil
+	b.Colony.AssignedTasksCount--
 }
 
 func (parent *Bot) AddOffspring(offspring *Bot) {
