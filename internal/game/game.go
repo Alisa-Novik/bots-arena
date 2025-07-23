@@ -9,6 +9,7 @@ import (
 	"golab/internal/ui"
 	"golab/internal/util"
 	"math/rand"
+	"slices"
 	"time"
 )
 
@@ -84,9 +85,9 @@ func (g *Game) environmentActions() {
 }
 
 func (g *Game) killBot(b *core.Bot, botIdx int) {
-	if b.Path != nil {
-		b.Path = nil
-	}
+	// if b.Path != nil {
+	// 	b.Path = nil
+	// }
 	if b.CurrTask != nil {
 		b.CurrTask.Owner = nil
 	}
@@ -141,6 +142,10 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		c.AddTask(task)
 	}
 
+	if c.Counter%5 == 0 {
+		c.Counter++
+		c.WaterPathFlowField = tasking.CalcFlowField(c.PathToWater, g.Board)
+	}
 	tasking.ProcessColonyTasks(ctrl, g.Board)
 }
 
@@ -344,13 +349,13 @@ func (g *Game) botsActions() {
 func (g *Game) calcHpChange() int {
 	var hpChange int
 	if g.config.LiveBots > 20000 {
-		hpChange = 15
+		hpChange = 5
 	} else if g.config.LiveBots > 15000 {
-		hpChange = 13
+		hpChange = 3
 	} else if g.config.LiveBots > 10000 {
-		hpChange = 13
+		hpChange = 3
 	} else if g.config.LiveBots > 5000 {
-		hpChange = 13
+		hpChange = 3
 	} else if g.config.LiveBots > 3000 {
 		hpChange = 2
 	} else if g.config.LiveBots > 1000 {
@@ -368,13 +373,13 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 			op = core.OpMove
 		}
 		// fmt.Printf("opcode: %v\n", op)
+		divisionThreshold := g.config.DivisionMinHp
+		if b.Colony != nil {
+			divisionThreshold = 100
+		}
 		switch op {
 		case core.OpDivide:
-			divMin := g.config.DivisionMinHp
-			if b.Colony != nil {
-				divMin = 80
-			}
-			if b.Hp < divMin {
+			if b.Hp < divisionThreshold {
 				b.PointerJumpBy(5)
 				return
 			}
@@ -465,6 +470,10 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 			continue
 
 		case core.OpEatOther:
+			//FIXME: remove
+			b.PointerJumpBy(1)
+			return
+
 			arg := b.CmdArg(1)
 			dir := util.PosClock[arg%8]
 			eatPos := pos.AddRowCol(dir[0], dir[1])
@@ -705,16 +714,27 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	g.Board.MarkDirty(idx(oldPos))
 	newPos := oldPos.AddDir(b.Dir)
+	oldIdx := util.Idx(oldPos)
 
 	if b.HasTask() {
 		// fmt.Printf("Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
-		if b.Pos == b.CurrTask.Pos {
+		if slices.Contains(b.Colony.PathToWater, oldPos) {
 			b.CurrTask.MarkDone()
 			return
 		}
-		if g.Board.IsEmpty(b.PeekNextPos()) {
-			// fmt.Printf("Popping. Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
-			newPos = b.PopNextPos()
+		if b.Colony.WaterPathFlowField == nil {
+			fmt.Println("Flow field is empty.")
+			return
+		}
+		best := b.Colony.WaterPathFlowField[oldIdx]
+		for _, dir := range util.PosCross {
+			n := oldPos.AddDir(dir)
+			if g.Board.GetBot(n) != nil {
+				continue
+			}
+			if v := b.Colony.WaterPathFlowField[util.Idx(n)]; v < best {
+				best, newPos = v, n
+			}
 		}
 	}
 
@@ -724,7 +744,7 @@ func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 
 	b.Pos = newPos
 
-	g.Board.Bots[idx(oldPos)] = nil
+	g.Board.Bots[oldIdx] = nil
 	g.Board.Bots[idx(newPos)] = b
 
 	g.Board.Set(newPos, b)
@@ -799,6 +819,7 @@ func (g *Game) grab(pos core.Position, b *core.Bot) {
 		b.Genome.NextArg = 4
 		return
 	case core.Controller:
+		//FIXME: remove
 		if !v.Owner.SameColony(b) {
 			// arg := b.CmdArg(1) % 2
 			// if arg == 0 {
@@ -806,9 +827,9 @@ func (g *Game) grab(pos core.Position, b *core.Bot) {
 			// 	v.Owner = b
 			// 	b.PointerJumpBy(9)
 			// } else {
-			g.Board.Set(grabPos, nil)
-			v.Owner.Colony = nil
-			b.PointerJumpBy(10)
+			// g.Board.Set(grabPos, nil)
+			// v.Owner.Colony = nil
+			// b.PointerJumpBy(10)
 			// }
 			return
 		}

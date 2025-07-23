@@ -90,7 +90,7 @@ func NewConfig() Config {
 		NewGenThreshold:  5,
 		ChildrenByBot:    20,
 		DivisionCost:     25,
-		DivisionMinHp:    100,
+		DivisionMinHp:    120,
 		DisableFarms:     false,
 		UseInitialGenome: false,
 

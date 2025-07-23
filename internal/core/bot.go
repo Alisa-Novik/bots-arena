@@ -1,6 +1,7 @@
 package core
 
 import (
+	"golab/internal/assert"
 	"golab/internal/util"
 	"math/rand"
 	"sync"
@@ -29,8 +30,8 @@ type Bot struct {
 	HasSpawner         bool
 	Pos                util.Position
 	CurrTask           *ColonyTask
-	Path               []util.Position
-	CooldownUntil      time.Time
+	// Path               []util.Position
+	CooldownUntil time.Time
 
 	hashLo, hashHi uint64
 	Unloading      bool
@@ -42,15 +43,15 @@ func (m *Bot) HasCooldown(now time.Time) bool {
 }
 
 func (m *Bot) StartCooldown(now time.Time) {
-	m.CooldownUntil = now.Add(50 * time.Second)
+	m.CooldownUntil = now.Add(5 * time.Second)
 }
 
 func (m *Bot) DisconnectFromColony() {
 	m.ConnnectedToColony = false
 	// m.Colony = nil
-	if m.CurrTask != nil {
-		m.UnassignTask()
-	}
+	// if m.CurrTask != nil {
+	// 	m.UnassignTask()
+	// }
 }
 
 func NewBot(pos util.Position) Bot {
@@ -80,9 +81,9 @@ func (b *Bot) SetColor(color [3]float32, markDirty func(int)) {
 }
 
 func (b *Bot) AssignTask(task *ColonyTask) {
-	assert(b.Colony != nil, "Bot doesn't have a colony.")
-	assert(!b.HasTask(), "Bot already has a task.")
-	assert(!task.HasOwner(), "Task already has an owner.")
+	assert.Assert(b.Colony != nil, "Bot doesn't have a colony.")
+	assert.Assert(!b.HasTask(), "Bot already has a task.")
+	assert.Assert(!task.HasOwner(), "Task already has an owner.")
 
 	b.CurrTask = task
 	b.CurrTask.Owner = b
@@ -90,15 +91,16 @@ func (b *Bot) AssignTask(task *ColonyTask) {
 	b.Colony.AssignedTasksCount++
 }
 
-func (b *Bot) UnassignTask() {
-	assert(b.CurrTask != nil, "No task to unassign")
+func (b *Bot) UnassignTask(now time.Time) {
+	assert.Assert(b.CurrTask != nil, "No task to unassign")
 
 	b.CurrTask.ExpiresAt = CalcExpiresAt()
 
 	b.CurrTask.Owner = nil
 	b.CurrTask = nil
-	b.Path = nil
+	// b.Path = nil
 	b.Colony.AssignedTasksCount--
+	b.StartCooldown(now)
 }
 
 func (parent *Bot) AddOffspring(offspring *Bot) {
@@ -109,9 +111,9 @@ func (parent *Bot) RemoveOffspring(offspring *Bot) {
 	delete(parent.Offsprings, offspring)
 }
 
-func (b *Bot) PeekNextPos() util.Position {
-	return b.Path[0]
-}
+// func (b *Bot) PeekNextPos() util.Position {
+// 	return b.Path[0]
+// }
 
 func (b *Bot) HasTask() bool {
 	return b.CurrTask != nil
@@ -125,22 +127,16 @@ func (b *Bot) HasUndoneTask() bool {
 	return b.CurrTask != nil && !b.CurrTask.IsDone
 }
 
-func (b *Bot) PopNextPos() util.Position {
-	path := b.Path
-
-	assert(len(path) > 0, "Trying to pop from empty path")
-	assert(path[len(path)-1] == b.CurrTask.Pos, "No target in path")
-
-	pos := path[0]
-	b.Path = path[1:]
-	return pos
-}
-
-func assert(cond bool, msg string) {
-	if !cond {
-		panic(msg)
-	}
-}
+// func (b *Bot) PopNextPos() util.Position {
+// 	path := b.Path
+//
+// 	assert.Assert(len(path) > 0, "Trying to pop from empty path")
+// 	assert.Assert(path[len(path)-1] == b.CurrTask.Pos, "No target in path")
+//
+// 	pos := path[0]
+// 	b.Path = path[1:]
+// 	return pos
+// }
 
 func (b *Bot) AssignRandomColor() {
 	b.Color = util.RandomColor()

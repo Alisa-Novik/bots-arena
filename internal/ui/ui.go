@@ -407,8 +407,8 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 					targetPos = b.CurrTask.Pos
 				}
 
-				fmt.Printf("Bot Pos: %v; Path: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
-					b.Pos, b.Path, b.CurrTask == nil, taskIsDone, targetPos)
+				fmt.Printf("Bot Pos: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
+					b.Pos, b.CurrTask == nil, taskIsDone, targetPos)
 			} else {
 				fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
 					util.PosOf(hoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
@@ -499,6 +499,10 @@ const stride = int32(8 * 4)
 
 var dynVertCount int
 
+func idx(p Position) int {
+	return util.Idx(p)
+}
+
 func DrawGrid(brd *core.Board, bots []*core.Bot) {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 	ApplyCamera()
@@ -532,6 +536,9 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 	}
 	// -----------------------------------------------------------------------------
 
+	for _, p := range brd.PathsToRenderR {
+		brd.MarkDirty(idx(p))
+	}
 	for idx, dirty := range brd.DirtyBitmap() {
 		if !dirty {
 			if runStart >= 0 {

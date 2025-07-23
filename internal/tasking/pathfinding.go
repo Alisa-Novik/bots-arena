@@ -2,8 +2,13 @@ package tasking
 
 import (
 	"container/heap"
+	"golab/internal/assert"
+	"golab/internal/core"
 	"golab/internal/util"
+	"math"
 )
+
+type Position = util.Position
 
 type node struct {
 	p Position
@@ -31,11 +36,41 @@ func CalcPath(
 	path := findPath(botPos, targetPos, filter)
 
 	if len(path) != 0 {
-		assert(path[0] != botPos, "Current pos in path")
-		assert(path[len(path)-1] == targetPos, "No target in path")
+		assert.Assert(path[0] != botPos, "Current pos in path")
+		assert.Assert(path[len(path)-1] == targetPos, "No target in path")
 	}
 
 	return path
+}
+
+func CalcFlowField(sources []util.Position, brd *core.Board) []int16 {
+	dist := make([]int16, util.Cells)
+	for i := range dist {
+		dist[i] = math.MaxInt16
+	}
+	q := make([]util.Position, 0, len(sources))
+	for _, p := range sources {
+		dist[util.Idx(p)] = 0
+		q = append(q, p)
+	}
+	head := 0
+	for head < len(q) {
+		p := q[head]
+		head++
+		d := dist[util.Idx(p)]
+		for _, mv := range util.PosCross {
+			n := p.AddDir(mv)
+			if util.OutOfBounds(n) || !brd.IsEmpty(n) || brd.GetBot(n) != nil {
+				continue
+			}
+			ni := util.Idx(n)
+			if dist[ni] > d+1 {
+				dist[ni] = d + 1
+				q = append(q, n)
+			}
+		}
+	}
+	return dist
 }
 
 func findPath(start, end Position, passable func(Position) bool) []Position {
@@ -78,5 +113,3 @@ func findPath(start, end Position, passable func(Position) bool) []Position {
 	}
 	return nil
 }
-
-type Position = util.Position

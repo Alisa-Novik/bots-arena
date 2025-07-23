@@ -2,6 +2,7 @@ package tasking
 
 import (
 	"fmt"
+	"golab/internal/assert"
 	"golab/internal/core"
 	"golab/internal/util"
 	"sort"
@@ -23,25 +24,27 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 			return
 		}
 
-		c.PathToWater = CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
+		// c.PathToWater = CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
+		c.PathToWater = CalcPath(ctrl.Pos, util.NewPos(1, 1), brd.IsEmptyOrBot, nil)
 		pathLen := len(c.PathToWater)
 		if pathLen == 0 {
 			return
 		}
 		// remove water tile itself
 		c.PathToWater = c.PathToWater[:pathLen-1]
-
-		for _, pathPos := range c.PathToWater {
-			c.AddTask(c.NewMaintainConnectionTask(pathPos))
-			brd.PathsToRenderR = append(brd.PathsToRenderR, pathPos)
-			brd.MarkDirty(util.Idx(pathPos))
+		brd.PathsToRenderR = append(brd.PathsToRenderR, c.PathToWater...)
+		if len(c.PathToWater) == 0 {
+			continue
 		}
-
+		c.WaterPathFlowField = CalcFlowField(c.PathToWater, brd)
+		for _, pos := range c.PathToWater {
+			c.Tasks = append(c.Tasks, c.NewMaintainConnectionTask(pos, &c.WaterPathFlowField))
+		}
 		task.MarkDone()
 		continue
 	}
 
-	for _, task := range SortedByDist(c.Tasks, ctrl.Pos) {
+	for _, task := range c.Tasks {
 		if task.Type != core.MaintainConnectionTask || task.IsDone {
 			continue
 		}
@@ -50,35 +53,26 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 				continue
 			}
 			if old := b.CurrTask; old != nil {
-				b.UnassignTask()
+				b.UnassignTask(now)
 			}
 			b.AssignTask(task)
-			b.Path = nil
 			b.CurrTask.MarkDone()
 			continue
 		}
 		if task.HasOwner() && task.IsExpired(now) {
-			task.Owner.StartCooldown(now)
-			task.Owner.UnassignTask()
+			task.Owner.UnassignTask(now)
 			continue
 		}
-		if task.HasOwner() || c.HasNoFreeMembers() {
+		if task.HasOwner() {
 			continue
 		}
-		if ctrl.Colony.AssignedUndoneTasksCount() > 10 {
-			continue
-		}
-		for _, b := range SortedFreeBots(c.Members, task.Pos, now) {
+		midIdx := len(c.WaterPositions) / 2
+		midPos := c.WaterPositions[midIdx]
+		for _, b := range SortedFreeBots(c.Members, midPos, now) {
 			if b.HasTask() || b.HasCooldown(now) {
 				continue
 			}
-			path := CalcPath(b.Pos, task.Pos, brd.IsEmpty, brd.IsSurrounded)
-			if len(path) == 0 {
-				b.StartCooldown(now)
-				continue
-			}
 			b.AssignTask(task)
-			b.Path = path
 			break
 		}
 	}
@@ -92,7 +86,7 @@ func SortedByDist(tasks []*core.ColonyTask, target util.Position) []*core.Colony
 
 	pairs := make([]pair, 0, len(tasks))
 	for _, b := range tasks {
-		assert(b != nil, "nil in task list")
+		assert.Assert(b != nil, "nil in task list")
 		dr := b.Pos.R - target.R
 		dc := b.Pos.C - target.C
 		pairs = append(pairs, pair{t: b, dist: dr*dr + dc*dc})
@@ -130,10 +124,4 @@ func SortedFreeBots(members []*core.Bot, target util.Position, now time.Time) []
 		out[i] = pairs[i].b
 	}
 	return out
-}
-
-func assert(cond bool, msg string) {
-	if !cond {
-		panic(msg)
-	}
 }

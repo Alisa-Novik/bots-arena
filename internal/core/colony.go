@@ -23,11 +23,13 @@ type Colony struct {
 	Tasks    []*ColonyTask
 	Color    [3]float32
 
-	FlowFieldToWater   []util.Position
+	WaterPathFlowField []int16
 	PathToWater        []util.Position
 	WaterPositions     []util.Position
 	WaterGroupIds      []int
+
 	AssignedTasksCount int
+	Counter            int
 }
 
 func NewColony(pos util.Position) Colony {
@@ -51,7 +53,7 @@ func (c *Colony) HealMember(m *Bot, ctrl *Controller) {
 		m.Inventory.Amount--
 	}
 	if m.Inventory.Amount > 0 {
-		m.Hp += 5
+		m.Hp += 15
 	} else {
 		m.Hp += 3
 	}
@@ -80,25 +82,27 @@ func (c *Colony) AssignedUndoneTasksCount() int {
 	return count
 }
 
-func (c *Colony) NewMaintainConnectionTask(pos util.Position) *ColonyTask {
-	return c.NewTask(pos, MaintainConnectionTask)
+func (c *Colony) NewMaintainConnectionTask(pos Position, flowField *[]int16) *ColonyTask {
+	return &ColonyTask{
+		Type:      MaintainConnectionTask,
+		Owner:     nil,
+		ExpiresAt: CalcExpiresAt(),
+		FlowField: flowField,
+		Pos:       pos,
+	}
 }
 
 func (c *Colony) NewConnectionTask(pos util.Position) *ColonyTask {
-	return c.NewTask(pos, ConnectToPosTask)
-}
-
-func (c *Colony) NewTask(pos util.Position, taskType ColonyTaskType) *ColonyTask {
 	return &ColonyTask{
 		Pos:       pos,
-		Type:      taskType,
+		Type:      ConnectToPosTask,
 		Owner:     nil,
 		ExpiresAt: CalcExpiresAt(),
 	}
 }
 
 func CalcExpiresAt() time.Time {
-	return time.Now().Add(25 * time.Second)
+	return time.Now().Add(3 * time.Second)
 }
 
 func (c *Colony) KnowsWaterGroupId(groupId int) bool {
@@ -207,6 +211,7 @@ type ColonyTask struct {
 	IsDone    bool
 	Pos       util.Position
 	ExpiresAt time.Time
+	FlowField *[]int16
 }
 
 func (t *ColonyTask) IsExpired(now time.Time) bool {
