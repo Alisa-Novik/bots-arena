@@ -19,6 +19,19 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 	}
 
 	for _, task := range c.Tasks {
+		switch task.Status {
+		case core.NotStarted:
+			fmt.Println("Task is done.")
+			continue
+		case core.InProgress:
+			fmt.Println("Task is done.")
+			continue
+		case core.Done:
+			fmt.Println("Task is done.")
+			continue
+	}
+
+	for _, task := range c.Tasks {
 		if task.Type != core.ConnectToPosTask || task.IsDone {
 			continue
 		}
@@ -136,7 +149,7 @@ func farthestPos(path []util.Position, origin util.Position) util.Position {
 	for _, p := range path {
 		dr := p.R - origin.R
 		dc := p.C - origin.C
-		d := dr*dr + dc*dc // squared Euclidean
+		d := dr*dr + dc*dc
 		if d > max {
 			max, res = d, p
 		}

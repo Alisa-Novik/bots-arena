@@ -138,7 +138,6 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 
 	if len(c.WaterPositions) > 0 && !c.HasTaskOfType(core.ConnectToPosTask) {
 		task := c.NewConnectionTask(c.WaterPositions[0])
-		// task := c.NewConnectionTask(util.NewPos(1, 1))
 		c.AddTask(task)
 	}
 
@@ -284,7 +283,7 @@ func (g *Game) populateBoard() {
 				g.Board.Set(pos, c)
 				continue
 			}
-			if b := oldBoard.Bots[idx(pos)]; b != nil {
+			if b := oldBoard.GetBot(pos); b != nil {
 				g.Board.Bots[idx(pos)] = b
 				g.Board.Set(pos, b)
 			}

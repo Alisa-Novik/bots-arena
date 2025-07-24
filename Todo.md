@@ -29,4 +29,5 @@ Additionnaly there is not distinction between colonies
 
 A lot of stuff is very broken actually. I should go back and fix them after pathfinding in good state.
 I need to mark everything I'm finding with todos or leave notes
+____
 

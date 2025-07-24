@@ -186,6 +186,12 @@ type ColonyMarkerType int
 
 type ColonyTaskType int
 
+const (
+	FindWaterTask ColonyTaskType = iota
+	ConnectToPosTask
+	MaintainConnectionTask
+)
+
 func (t ColonyTaskType) String() string {
 	switch t {
 	case MaintainConnectionTask:
@@ -198,10 +204,12 @@ func (t ColonyTaskType) String() string {
 	return "UnknownTaskType"
 }
 
+type ColonyTaskStatus int
+
 const (
-	FindWaterTask ColonyTaskType = iota
-	ConnectToPosTask
-	MaintainConnectionTask
+	NotStarted ColonyTaskStatus = iota
+	InProgress
+	Done
 )
 
 type ColonyTask struct {
@@ -212,6 +220,7 @@ type ColonyTask struct {
 	Pos       util.Position
 	ExpiresAt time.Time
 	FlowField *[]int16
+	Status    ColonyTaskStatus
 }
 
 func (t *ColonyTask) IsExpired(now time.Time) bool {
@@ -222,8 +231,13 @@ func (c *ColonyTask) HasOwner() bool {
 	return c.Owner != nil
 }
 
+func (t *ColonyTask) IsStatusDone() bool {
+	return t.Status == Done
+}
+
 func (t *ColonyTask) MarkDone() {
 	t.IsDone = true
+	t.Status = Done
 }
 
 type ColonyFlag struct {

@@ -32,10 +32,6 @@ type Bot struct {
 	CurrTask           *ColonyTask
 	// Path               []util.Position
 	CooldownUntil time.Time
-
-	hashLo, hashHi uint64
-	Unloading      bool
-	Usp            [2]int // unloading starting pos
 }
 
 func (m *Bot) HasCooldown(now time.Time) bool {
@@ -69,8 +65,6 @@ func NewBot(pos util.Position) Bot {
 		Color:              color,
 		PrevColor:          color,
 		HasSpawner:         false,
-		Unloading:          false,
-		Usp:                [2]int{0, 0},
 	}
 }
 
