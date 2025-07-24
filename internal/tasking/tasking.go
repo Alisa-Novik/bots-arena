@@ -29,6 +29,7 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		case core.Done:
 			fmt.Println("Task is done.")
 			continue
+		}
 	}
 
 	for _, task := range c.Tasks {
