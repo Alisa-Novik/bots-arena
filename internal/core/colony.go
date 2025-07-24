@@ -102,7 +102,7 @@ func (c *Colony) NewConnectionTask(pos util.Position) *ColonyTask {
 }
 
 func CalcExpiresAt() time.Time {
-	return time.Now().Add(3 * time.Second)
+	return time.Now().Add(10 * time.Second)
 }
 
 func (c *Colony) KnowsWaterGroupId(groupId int) bool {

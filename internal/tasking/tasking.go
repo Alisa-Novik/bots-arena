@@ -66,9 +66,8 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		if task.HasOwner() {
 			continue
 		}
-		midIdx := len(c.WaterPositions) / 2
-		midPos := c.WaterPositions[midIdx]
-		for _, b := range SortedFreeBots(c.Members, midPos, now) {
+		farPos := farthestPos(c.WaterPositions, ctrl.Pos)
+		for _, b := range SortedFreeBots(c.Members, farPos, now) {
 			if b.HasTask() || b.HasCooldown(now) {
 				continue
 			}
@@ -124,4 +123,18 @@ func SortedFreeBots(members []*core.Bot, target util.Position, now time.Time) []
 		out[i] = pairs[i].b
 	}
 	return out
+}
+
+func farthestPos(path []util.Position, origin util.Position) util.Position {
+	var res util.Position
+	max := -1
+	for _, p := range path {
+		dr := p.R - origin.R
+		dc := p.C - origin.C
+		d := dr*dr + dc*dc // squared Euclidean
+		if d > max {
+			max, res = d, p
+		}
+	}
+	return res
 }

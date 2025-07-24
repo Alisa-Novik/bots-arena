@@ -142,8 +142,8 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		c.AddTask(task)
 	}
 
+	c.Counter++
 	if c.Counter%5 == 0 {
-		c.Counter++
 		c.WaterPathFlowField = tasking.CalcFlowField(c.PathToWater, g.Board)
 	}
 	tasking.ProcessColonyTasks(ctrl, g.Board)
