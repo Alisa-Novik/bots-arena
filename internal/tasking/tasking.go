@@ -13,6 +13,11 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 	c := ctrl.Colony
 	now := time.Now()
 
+	c.Counter++
+	if c.Counter%5 == 0 {
+		c.WaterPathFlowField = CalcFlowField(c.PathToWater, brd)
+	}
+
 	for _, task := range c.Tasks {
 		if task.Type != core.ConnectToPosTask || task.IsDone {
 			continue
