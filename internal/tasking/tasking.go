@@ -19,20 +19,6 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 	}
 
 	for _, task := range c.Tasks {
-		switch task.Status {
-		case core.NotStarted:
-			fmt.Println("Task is done.")
-			continue
-		case core.InProgress:
-			fmt.Println("Task is done.")
-			continue
-		case core.Done:
-			fmt.Println("Task is done.")
-			continue
-		}
-	}
-
-	for _, task := range c.Tasks {
 		if task.Type != core.ConnectToPosTask || task.IsDone {
 			continue
 		}

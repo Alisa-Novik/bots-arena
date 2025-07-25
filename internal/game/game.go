@@ -53,7 +53,7 @@ func (g *Game) RunHeadless() {
 func (g *Game) environmentActions() {
 	for r := range core.Rows {
 		for c := range core.Cols {
-			pos := core.Position{C: c, R: r}
+			pos := util.NewPos(r, c)
 			switch v := g.Board.At(pos).(type) {
 			case core.Organics:
 				if v.Amount <= 1 {
@@ -123,9 +123,8 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 
 	for _, m := range c.Members {
 		c.HealMember(m, ctrl)
-
 		if task := m.CurrTask; task != nil {
-			m.Hp += 1
+			m.Hp += 3
 			if !task.IsDone {
 				m.SetColor(util.CyanColor(), g.Board.MarkDirty)
 			} else {
@@ -185,7 +184,6 @@ func (g *Game) Run() {
 	g.populateBoard()
 
 	ui.BuildStaticLayer(g.Board)
-	ui.GameCallbacks.PrintPathToTask = g.Board.GetBot
 
 	for !ui.Window.ShouldClose() {
 		if g.config.Pause {
@@ -248,6 +246,7 @@ func (g *Game) step() {
 func (g *Game) populateBoard() {
 	oldBoard := g.Board
 	g.Board = core.NewBoard()
+	ui.SetBoard(g.Board)
 	for r := range core.Rows {
 		for c := range core.Cols {
 			pos := core.Position{C: c, R: r}

@@ -8,7 +8,6 @@ import (
 	"image"
 	"os"
 	"slices"
-	"time"
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -16,10 +15,6 @@ import (
 )
 
 type Position = core.Position
-
-type Callbacks struct {
-	PrintPathToTask func(util.Position) *core.Bot
-}
 
 const (
 	rows = core.Rows
@@ -61,7 +56,6 @@ var (
 var conf *config.Config
 var brd *core.Board // for marking as dirty
 var gameState *config.GameState
-var GameCallbacks Callbacks
 
 // Camera
 var (
@@ -136,31 +130,6 @@ func mayVanish(o core.Occupant) bool {
 	}
 }
 
-func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-	if action != glfw.Press {
-		return
-	}
-	switch key {
-	case glfw.KeyE:
-		conf.ToggleTaskTargets()
-	case glfw.KeyW:
-		conf.ToggleUnreachables()
-	case glfw.KeyQ:
-		conf.TogglePaths()
-	case glfw.KeyK:
-		conf.SpeedUp()
-	case glfw.KeyJ:
-		conf.SlowDown()
-	case glfw.KeyP:
-		conf.Pause = !conf.Pause
-		if !conf.Pause {
-			gameState.LastLogic = time.Now()
-		}
-	case glfw.KeyEscape:
-		w.SetShouldClose(true)
-	}
-}
-
 func SetGameState(s *config.GameState) {
 	if s == nil {
 		panic("config is nil")
@@ -182,10 +151,17 @@ func SetConfig(config *config.Config) {
 	conf = config
 }
 
+var ctrlState ControlState
+
 func PrepareUi() {
 	if err := glfw.Init(); err != nil {
 		panic(err)
 	}
+
+	ctrlState = ControlState{
+		HoveredIdx: -1,
+	}
+
 	mon := glfw.GetPrimaryMonitor()
 	mode := mon.GetVideoMode()
 	screenW, screenH := mode.Width, mode.Height
@@ -241,17 +217,6 @@ func PrepareUi() {
 	r, g, b := clrDefault[0], clrDefault[1], clrDefault[2]
 	gl.ClearColor(r, g, b, 1)
 	Window = window
-}
-
-func scrollCallback(_ *glfw.Window, _ float64, yoff float64) {
-	f := 1 + float32(yoff)*0.1
-	camScale *= f
-	if camScale < 0.5 {
-		camScale = 0.5
-	}
-	if camScale > 4.0 {
-		camScale = 4.0
-	}
 }
 
 func loadTexture(filename string) uint32 {
@@ -345,77 +310,12 @@ func LoadFont(name string) *gltext.Font {
 	return ft
 }
 
-var hoveredIdx = -1
-
-func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
-	winW, winH := w.GetSize()
-
-	// hover calculation
-	cellPxX := float32(winW) / float32(cols) * camScale
-	cellPxY := float32(winH) / float32(rows) * camScale
-	wx := camX + float32(xpos)/cellPxX
-	wy := camY + float32(float32(winH)-float32(ypos))/cellPxY
-	r, c := int(wy), int(wx)
-	idx := r*core.Cols + c
-	if idx != hoveredIdx && idx >= 0 && idx < maxCells {
-		if hoveredIdx >= 0 {
-			brd.MarkDirty(hoveredIdx)
-		}
-		hoveredIdx = idx
-		brd.MarkDirty(hoveredIdx)
-	}
-
-	// camera drag
-	if !dragging {
-		return
-	}
-	dx := xpos - dragStartX
-	dy := ypos - dragStartY
-	camX = camStartX - float32(dx)*float32(cols)/float32(winW)/camScale
-	camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale
-}
-
 func ApplyCamera() {
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.LoadIdentity()
 	f := float32(1)
 	gl.Scalef(camScale*f, camScale*f, 1)
 	gl.Translatef(-camX*f, -camY*f, 0)
-}
-
-func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
-	if button != glfw.MouseButtonLeft {
-		return
-	}
-	switch action {
-	case glfw.Press:
-		dragging = true
-		dragStartX, dragStartY = w.GetCursorPos()
-		camStartX, camStartY = camX, camY
-	case glfw.Release:
-		if hoveredIdx != -1 {
-			hoveredPos := util.PosOf(hoveredIdx)
-
-			if b := GameCallbacks.PrintPathToTask(hoveredPos); b != nil {
-
-				taskIsDone := "no"
-				if b.CurrTask != nil && b.CurrTask.IsDone {
-					taskIsDone = "yes"
-				}
-				targetPos := util.NewPos(0, 0)
-				if b.CurrTask != nil {
-					targetPos = b.CurrTask.Pos
-				}
-
-				fmt.Printf("Bot Pos: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
-					b.Pos, b.CurrTask == nil, taskIsDone, targetPos)
-			} else {
-				fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
-					util.PosOf(hoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
-			}
-		}
-		dragging = false
-	}
 }
 
 var overlayW float32 = 230 // pixels
@@ -450,7 +350,7 @@ func drawFloatingPane(offsetX float32, renderText func()) {
 }
 
 func pickSprite(o core.Occupant, idx int) (color [3]float32, uv [4]float32) {
-	if idx == hoveredIdx {
+	if idx == ctrlState.HoveredIdx {
 		if _, ok := o.(*core.Bot); ok {
 			return util.YellowColor(), uvBot
 		}
@@ -459,6 +359,10 @@ func pickSprite(o core.Occupant, idx int) (color [3]float32, uv [4]float32) {
 	case *core.Bot:
 		r, g, b := o.Color[0], o.Color[1], o.Color[2]
 		clr := [3]float32{r, g, b}
+
+		if o.IsSelected {
+			clr = util.YellowColor()
+		}
 		return clr, uvBot
 	case core.Food:
 		return [3]float32{1, 0, 0.8}, uvFood
@@ -507,21 +411,17 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 	ApplyCamera()
 
-	// 1. any cell with a bot is dirty this frame
+	// any cell with a bot is dirty this frame
 	for idx, b := range bots {
 		if b != nil {
 			brd.MarkDirty(idx)
 		}
 	}
 
-	// -----------------------------------------------------------------------------
-	// Upload only contiguous runs of dirty tiles – FIX #2 (crash-free)
-	// -----------------------------------------------------------------------------
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboDynamic)
 
-	// helpers --------------------------------------------------------------------
-	runStart := -1 // first dirty cell in current run (-1 == no run yet)
-	prevIdx := -2  // previous dirty cell index
+	runStart := -1
+	prevIdx := -2
 
 	flushRun := func(first, last int) {
 		if first < 0 {
@@ -534,7 +434,6 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 
 		gl.BufferSubData(gl.ARRAY_BUFFER, int(byteOff), nVerts*int(stride), gl.Ptr(vertsDyn[baseVert:baseVert+nVerts]))
 	}
-	// -----------------------------------------------------------------------------
 
 	for _, p := range brd.PathsToRenderR {
 		brd.MarkDirty(idx(p))
@@ -548,13 +447,10 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 			continue
 		}
 
-		// -------- tile idx IS dirty --------
 		p := Position{R: idx / core.Cols, C: idx % core.Cols}
 		col, uv := pickSprite(brd.At(p), idx)
 		if conf.RenderPaths && slices.Contains(brd.PathsToRenderR, p) {
-			// if bots[util.Idx(p)] == nil {
 			col, uv = util.CyanColor(), uvLight
-			// }
 		}
 		if conf.RenderTaskTargets && slices.Contains(brd.TaskTargetsR, p) {
 			col, uv = util.PinkColor(), uvLight
@@ -569,11 +465,8 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 		}
 		brd.MarkClean(idx)
 
-		// build / extend the run
 		if idx == prevIdx+1 && runStart >= 0 {
-			// still contiguous – just extend
 		} else {
-			// new run; flush previous if any
 			if runStart >= 0 {
 				flushRun(runStart, prevIdx)
 			}
@@ -581,17 +474,15 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 		}
 		prevIdx = idx
 	}
-	// any pending run left?
 	flushRun(runStart, prevIdx)
 
-	// 4. draw everything
 	gl.BindTexture(gl.TEXTURE_2D, atlasTex)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboStatic)
-	gl.DrawArrays(gl.QUADS, 0, int32(len(vertsStat))) // static layer
+	gl.DrawArrays(gl.QUADS, 0, int32(len(vertsStat)))
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vboDynamic)
-	gl.DrawArrays(gl.QUADS, 0, int32(dynVertCount)) // dynamic layer
+	gl.DrawArrays(gl.QUADS, 0, int32(dynVertCount))
 
 	drawOverlay()
 	Window.SwapBuffers()

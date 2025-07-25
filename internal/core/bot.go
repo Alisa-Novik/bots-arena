@@ -27,6 +27,7 @@ type Bot struct {
 	Hp                 int
 	Color              [3]float32
 	PrevColor          [3]float32
+	IsSelected         bool
 	HasSpawner         bool
 	Pos                util.Position
 	CurrTask           *ColonyTask
@@ -64,6 +65,7 @@ func NewBot(pos util.Position) Bot {
 		Hp:                 botHp,
 		Color:              color,
 		PrevColor:          color,
+		IsSelected:         false,
 		HasSpawner:         false,
 	}
 }
