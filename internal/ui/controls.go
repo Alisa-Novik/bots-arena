@@ -10,9 +10,11 @@ import (
 )
 
 type ControlState struct {
-	Dragging     bool
-	HoveredIdx   int
-	LastClickIdx int
+	Dragging         bool
+	HoveredIdx       int
+	LastClickIdx     int
+	LeftCtrlPressed  bool
+	LeftShiftPressed bool
 }
 
 func highlightRect(brd *core.Board, fromIdx, toIdx int) {
@@ -38,6 +40,7 @@ func highlightRect(brd *core.Board, fromIdx, toIdx int) {
 		}
 	}
 }
+
 func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
 	winW, winH := w.GetSize()
 
@@ -58,14 +61,6 @@ func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
 		brd.MarkDirty(ctrlState.HoveredIdx)
 	}
 	highlightRect(brd, ctrlState.LastClickIdx, ctrlState.HoveredIdx)
-	// for idx, occ := range *brd.GetGrid() {
-	// 	if idx > ctrlState.LastClickIdx && idx < ctrlState.HoveredIdx {
-	// 		if occ.(core.Bot) {
-	// 		}
-	// 		brd.MarkDirty(idx)
-	// 	}
-	// }
-	// camera drag
 	if !dragging {
 		return
 	}
@@ -81,41 +76,58 @@ func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Ac
 	}
 	switch action {
 	case glfw.Press:
-		// dragging = true
+		if ctrlState.LeftShiftPressed {
+			dragging = true
+		}
 		dragStartX, dragStartY = w.GetCursorPos()
 		camStartX, camStartY = camX, camY
+
 		if ctrlState.HoveredIdx != -1 {
 			ctrlState.LastClickIdx = ctrlState.HoveredIdx
-			fmt.Println("Recorded clicked position:", ctrlState.LastClickIdx)
 		}
+
 		for _, b := range brd.Bots {
 			if b == nil {
 				continue
 			}
-			b.IsSelected = false
+			if !ctrlState.LeftCtrlPressed {
+				b.IsSelected = false
+			}
 		}
 	case glfw.Release:
 		if ctrlState.HoveredIdx != -1 {
 			hoveredPos := util.PosOf(ctrlState.HoveredIdx)
-			if b := brd.GetBot(hoveredPos); b != nil {
-				taskIsDone := "no"
-				if b.CurrTask != nil && b.CurrTask.IsDone {
-					taskIsDone = "yes"
-				}
-				targetPos := util.NewPos(0, 0)
-				if b.CurrTask != nil {
-					targetPos = b.CurrTask.Pos
-				}
 
-				fmt.Printf("Bot Pos: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
-					b.Pos, b.CurrTask == nil, taskIsDone, targetPos)
-			} else {
-				fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
-					util.PosOf(ctrlState.HoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
+			if ctrlState.HoveredIdx == ctrlState.LastClickIdx {
+				if !brd.IsEmpty(hoveredPos) {
+					return
+				}
+				brd.Set(hoveredPos, core.Building{Pos: hoveredPos})
+				return
 			}
+
+			logBot(hoveredPos)
 		}
 		ctrlState.LastClickIdx = -1
 		dragging = false
+	}
+}
+
+func logBot(hoveredPos util.Position) {
+	if b := brd.GetBot(hoveredPos); b != nil {
+		taskIsDone := "no"
+		if b.CurrTask != nil && b.CurrTask.IsDone {
+			taskIsDone = "yes"
+		}
+		targetPos := util.NewPos(0, 0)
+		if b.CurrTask != nil {
+			targetPos = b.CurrTask.Pos
+		}
+		fmt.Printf("Bot Pos: %v; CurrTaskIsNull: %v; TaskIsDone: %v; TargetPos: %v\n",
+			b.Pos, b.CurrTask == nil, taskIsDone, targetPos)
+	} else {
+		fmt.Printf("Not bot. Pos: %v; BoardEmpty: %v; Occupant: %T\n",
+			util.PosOf(ctrlState.HoveredIdx), brd.IsEmpty(hoveredPos), brd.At(hoveredPos))
 	}
 }
 
@@ -131,26 +143,42 @@ func scrollCallback(_ *glfw.Window, _ float64, yoff float64) {
 }
 
 func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-	if action != glfw.Press {
-		return
-	}
-	switch key {
-	case glfw.KeyE:
-		conf.ToggleTaskTargets()
-	case glfw.KeyW:
-		conf.ToggleUnreachables()
-	case glfw.KeyQ:
-		conf.TogglePaths()
-	case glfw.KeyK:
-		conf.SpeedUp()
-	case glfw.KeyJ:
-		conf.SlowDown()
-	case glfw.KeyP:
-		conf.Pause = !conf.Pause
-		if !conf.Pause {
-			gameState.LastLogic = time.Now()
+	//Press
+	switch action {
+	case glfw.Press:
+		switch key {
+		case glfw.KeyLeftShift:
+			fmt.Println("left shift pressed")
+			ctrlState.LeftShiftPressed = true
+		case glfw.KeyLeftControl:
+			fmt.Println("left ctrl pressed")
+			ctrlState.LeftCtrlPressed = true
+		case glfw.KeyE:
+			conf.ToggleTaskTargets()
+		case glfw.KeyW:
+			conf.ToggleUnreachables()
+		case glfw.KeyQ:
+			conf.TogglePaths()
+		case glfw.KeyK:
+			conf.SpeedUp()
+		case glfw.KeyJ:
+			conf.SlowDown()
+		case glfw.KeyP:
+			conf.Pause = !conf.Pause
+			if !conf.Pause {
+				gameState.LastLogic = time.Now()
+			}
+		case glfw.KeyEscape:
+			w.SetShouldClose(true)
 		}
-	case glfw.KeyEscape:
-		w.SetShouldClose(true)
+	case glfw.Release:
+		switch key {
+		case glfw.KeyLeftShift:
+			fmt.Println("left shift unpressed")
+			ctrlState.LeftShiftPressed = false
+		case glfw.KeyLeftControl:
+			fmt.Println("left ctrl unpressed")
+			ctrlState.LeftCtrlPressed = false
+		}
 	}
 }
