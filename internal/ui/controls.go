@@ -61,13 +61,13 @@ func cursorPosCallback(w *glfw.Window, xpos, ypos float64) {
 		brd.MarkDirty(ctrlState.HoveredIdx)
 	}
 	highlightRect(brd, ctrlState.LastClickIdx, ctrlState.HoveredIdx)
-	if !dragging {
-		return
+
+	if dragging {
+		dx := xpos - dragStartX
+		dy := ypos - dragStartY
+		camX = camStartX - float32(dx)*float32(cols)/float32(winW)/camScale
+		camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale
 	}
-	dx := xpos - dragStartX
-	dy := ypos - dragStartY
-	camX = camStartX - float32(dx)*float32(cols)/float32(winW)/camScale
-	camY = camStartY + float32(dy)*float32(rows)/float32(winH)/camScale
 }
 
 func mouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {

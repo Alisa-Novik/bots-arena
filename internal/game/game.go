@@ -133,7 +133,7 @@ func (g *Game) handleController(ctrl *core.Controller, pos util.Position) {
 		}
 	}
 
-	c.HealBotsInFlagRadius(5, g.hpDrain())
+	c.HealBotsInFlagRadius(5, g.calcHpChange())
 
 	if len(c.WaterPositions) > 0 && !c.HasTaskOfType(core.ConnectToPosTask) {
 		task := c.NewConnectionTask(c.WaterPositions[0])
@@ -190,7 +190,7 @@ func (g *Game) Run() {
 			ui.DrawGrid(g.Board, g.Board.Bots)
 			continue
 		}
-		g.tick()
+		g.step()
 		ui.DrawGrid(g.Board, g.Board.Bots)
 	}
 }
@@ -214,7 +214,7 @@ func (g *Game) generateWater() {
 	}
 }
 
-func (g *Game) tick() {
+func (g *Game) step() {
 	var maxLogicPerFrame int
 	if g.config.LiveBots < 2000 {
 		maxLogicPerFrame = 64
@@ -321,7 +321,7 @@ func (g *Game) botsActions() {
 			continue
 		}
 		pos := util.PosOf(i)
-		b.Hp -= g.hpDrain()
+		b.Hp -= g.calcHpChange()
 		// b.Hp -= 1
 		b.Hp = min(b.Hp, 500)
 		if b.Hp <= 0 {
@@ -340,7 +340,7 @@ func (g *Game) botsActions() {
 	}
 }
 
-func (g *Game) hpDrain() int {
+func (g *Game) calcHpChange() int {
 	var hpChange int
 	if g.config.LiveBots > 20000 {
 		hpChange = 5
