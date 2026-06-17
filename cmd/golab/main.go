@@ -17,6 +17,10 @@ import (
 func init() { runtime.LockOSThread() }
 
 func main() {
+	if runCommand(os.Args[1:]) {
+		return
+	}
+
 	f, err := os.Create("cpu.out")
 	if err != nil {
 		panic(err)
@@ -31,7 +35,8 @@ func main() {
 		os.Exit(0)
 	}()
 
-	headless := flag.Bool("h", false, "is headless mode?")
+	headless := flag.Bool("h", false, "run without creating an OpenGL window")
+	headlessTicks := flag.Int("ticks", 0, "headless ticks to run before exiting; 0 runs until interrupted")
 	flag.Parse()
 
 	// config := config.LoadFromJson("conf.json")
@@ -44,7 +49,7 @@ func main() {
 
 	pprof.StartCPUProfile(f)
 	if *headless {
-		g.RunHeadless()
+		g.RunHeadless(*headlessTicks)
 	} else {
 		ui.PrepareUi()
 		defer glfw.Terminate()

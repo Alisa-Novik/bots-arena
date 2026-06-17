@@ -39,14 +39,35 @@ func NewGame(config *conf.Config) *Game {
 	}
 }
 
-func (g *Game) RunHeadless() {
+func (g *Game) Initialize() {
 	g.initialBotsGeneration()
+	g.generateWater()
+	g.populateBoard()
+	g.config.LiveBots = g.liveBotCount()
+	g.State.LastLogic = time.Now()
+}
+
+func (g *Game) RunHeadless(ticks int) {
+	fmt.Println("Running headless simulation...")
+	g.Initialize()
+	if ticks > 0 {
+		g.RunHeadlessFrames(ticks)
+		fmt.Printf("Headless simulation complete: ticks=%d live_bots=%d\n", ticks, g.liveBotCount())
+		return
+	}
+
 	for {
-		if g.liveBotCount() < g.config.NewGenThreshold {
-			g.initialBotsGeneration()
-		}
-		g.botsActions()
-		g.environmentActions()
+		g.runLogicTick()
+	}
+}
+
+func (g *Game) InitializeForCommands() {
+	g.Initialize()
+}
+
+func (g *Game) RunHeadlessFrames(count int) {
+	for range count {
+		g.runLogicTick()
 	}
 }
 
@@ -179,9 +200,7 @@ func (g *Game) connectBots(currPos util.Position, visited map[*core.Bot]struct{}
 
 func (g *Game) Run() {
 	fmt.Println("Running simulation...")
-	g.initialBotsGeneration()
-	g.generateWater()
-	g.populateBoard()
+	g.Initialize()
 
 	ui.BuildStaticLayer(g.Board)
 
@@ -229,17 +248,20 @@ func (g *Game) step() {
 	for executed := 0; executed < maxLogicPerFrame &&
 		time.Since(g.State.LastLogic) >= g.config.LogicStep; executed++ {
 
-		g.config.LiveBots = g.liveBotCount()
-		switch n := g.config.LiveBots; {
-		case n == 0, n <= g.config.NewGenThreshold:
-			g.initialBotsGeneration()
-			g.populateBoard()
-		default:
-			g.botsActions()
-			g.environmentActions()
-		}
-
+		g.runLogicTick()
 		g.State.LastLogic = g.State.LastLogic.Add(g.config.LogicStep)
+	}
+}
+
+func (g *Game) runLogicTick() {
+	g.config.LiveBots = g.liveBotCount()
+	switch n := g.config.LiveBots; {
+	case n == 0, n <= g.config.NewGenThreshold:
+		g.initialBotsGeneration()
+		g.populateBoard()
+	default:
+		g.botsActions()
+		g.environmentActions()
 	}
 }
 
@@ -464,30 +486,7 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 			continue
 
 		case core.OpEatOther:
-			//FIXME: remove
 			b.PointerJumpBy(1)
-			return
-
-			arg := b.CmdArg(1)
-			dir := util.PosClock[arg%8]
-			eatPos := pos.AddRowCol(dir[0], dir[1])
-			other, ok := g.Board.At(eatPos).(*core.Bot)
-
-			if ok && b.Hp >= other.Hp {
-				if other.SameColony(b) {
-					b.PointerJumpBy(1)
-					return
-				}
-				b.Hp += other.Hp
-				if g.config.EnableResourceBasedColorChange {
-					color := b.Color
-					dc := g.config.ColorDelta
-					b.Color = [3]float32{color[0] + dc, color[1] - dc, color[2] - dc}
-				}
-				g.Board.Clear(eatPos)
-				g.killBot(other, idx(eatPos))
-			}
-			b.PointerJumpBy(2)
 			return
 
 		case core.OpPhoto:

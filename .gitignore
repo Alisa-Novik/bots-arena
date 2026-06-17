@@ -12,3 +12,6 @@ test
 bin/
 dist/
 build/
+
+# Local graphics diagnostics
+debug_graphics.log

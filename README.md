@@ -58,6 +58,26 @@ Or directly via:
 go run .
 ```
 
+### Deterministic CLI surface (Linux/Discord automation)
+
+The binary also supports JSON-oriented command entry points for deterministic workflows:
+
+```bash
+go run . status --seed 42 --ticks 20 --top-bots 10
+go run . match --seed 42 --ticks 300
+go run . leaderboard --seed 100 --matches 3 --seed-step 7 --ticks 300
+go run . replay --seed 42 --ticks 120 --sample-every 5
+```
+
+All command modes are emitted as JSON and are deterministic for a fixed `--seed`:
+
+- `status`: one deterministic summary after a finite number of ticks.
+- `match`: one deterministic summary with winner fields.
+- `leaderboard`: deterministic aggregate of multiple matches.
+- `replay`: per-frame snapshots at a fixed sampling interval.
+
+The existing interactive mode remains unchanged when no command name is provided.
+
 ---
 
 ## 🎮 Controls
