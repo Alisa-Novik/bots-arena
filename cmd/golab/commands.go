@@ -473,6 +473,15 @@ func newDeterministicGame(seed int64) *game.Game {
 	return game.NewGame(&conf)
 }
 
+func registerColonyID(colonyIDByRef map[*core.Colony]int, colony *core.Colony) {
+	if colony == nil {
+		return
+	}
+	if _, ok := colonyIDByRef[colony]; !ok {
+		colonyIDByRef[colony] = len(colonyIDByRef)
+	}
+}
+
 func summarizeMatch(g *game.Game, seed int64, tick int, topBots int) matchSummary {
 	summary := matchSummary{
 		Command:   "status",
@@ -483,7 +492,15 @@ func summarizeMatch(g *game.Game, seed int64, tick int, topBots int) matchSummar
 
 	colonyIDByRef := map[*core.Colony]int{}
 	for _, colony := range g.Colonies {
-		colonyIDByRef[colony] = len(colonyIDByRef)
+		registerColonyID(colonyIDByRef, colony)
+	}
+	for _, cell := range *g.Board.GetGrid() {
+		switch v := cell.(type) {
+		case core.Controller:
+			registerColonyID(colonyIDByRef, v.Colony)
+		case *core.Controller:
+			registerColonyID(colonyIDByRef, v.Colony)
+		}
 	}
 	summary.ColonyCount = len(colonyIDByRef)
 

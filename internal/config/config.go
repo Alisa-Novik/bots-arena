@@ -41,6 +41,7 @@ type Config struct {
 	OrganicInitialAmount int `json:"organicInitialAmount"`
 
 	ControllerInitialAmount int `json:"controllerInitialAmount"`
+	ControllerBuildCost     int `json:"controllerBuildCost"`
 	ControllerHpGain        int `json:"controllerHpGain"`
 	ControllerGrabHpGain    int `json:"controllerGrabHpGain"`
 	ControllerGrabCost      int `json:"controllerGrabCost"`
@@ -98,6 +99,7 @@ func NewConfig() Config {
 		OrganicInitialAmount: 3,
 
 		ControllerInitialAmount: 10000,
+		ControllerBuildCost:     1,
 		ControllerHpGain:        1,
 		ControllerGrabHpGain:    15,
 		ControllerGrabCost:      1,

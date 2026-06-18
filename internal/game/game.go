@@ -389,7 +389,7 @@ func (g *Game) botAction(pos core.Position, b *core.Bot) {
 		}
 		// fmt.Printf("opcode: %v\n", op)
 		divisionThreshold := g.config.DivisionMinHp
-		if b.Colony != nil {
+		if b.ConnnectedToColony {
 			divisionThreshold = 100
 		}
 		switch op {
@@ -883,9 +883,11 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 
 	switch buildType {
 	case core.BuildWall:
-		// if b.Inventory.Amount < c.BuildingBuildCost {
-		// 	return
-		// }
+		if b.Inventory.Amount < c.BuildingBuildCost {
+			b.PointerJumpBy(2)
+			b.Genome.NextArg = 0
+			return
+		}
 		g.Board.Set(buildPos, core.Building{
 			Pos:   buildPos,
 			Owner: b,
@@ -926,6 +928,11 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 			b.PointerJumpBy(6)
 			return
 		}
+		if b.Inventory.Amount < c.ControllerBuildCost {
+			b.PointerJumpBy(6)
+			b.Genome.NextArg = 0
+			return
+		}
 
 		cln := core.NewColony(buildPos)
 		cln.AddFamily(b)
@@ -938,6 +945,7 @@ func (g *Game) build(botPos core.Position, b *core.Bot) {
 			WaterAmount: 0,
 		})
 		b.AssignRandomColor()
+		b.Inventory.Amount -= c.ControllerBuildCost
 		b.Hp += c.ControllerHpGain
 		b.PointerJumpBy(3)
 		b.Genome.NextArg = 3
