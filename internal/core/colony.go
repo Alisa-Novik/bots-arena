@@ -25,6 +25,8 @@ type Colony struct {
 
 	WaterPathFlowField []int16
 	PathToWater        []util.Position
+	pathToWaterMask    []bool
+	pathToWaterIndex   []int
 	WaterPositions     []util.Position
 	WaterGroupIds      []int
 
@@ -99,6 +101,57 @@ func (c *Colony) NewConnectionTask(pos util.Position) *ColonyTask {
 		Owner:     nil,
 		ExpiresAt: CalcExpiresAt(),
 	}
+}
+
+func (c *Colony) SetPathToWater(path []util.Position) {
+	c.PathToWater = path
+	c.pathToWaterMask = make([]bool, util.Cells)
+	c.pathToWaterIndex = make([]int, util.Cells)
+	for i := range c.pathToWaterIndex {
+		c.pathToWaterIndex[i] = -1
+	}
+	for _, pos := range path {
+		if util.OutOfBounds(pos) {
+			continue
+		}
+		c.pathToWaterMask[util.Idx(pos)] = true
+	}
+	for pathIdx, pos := range path {
+		if util.OutOfBounds(pos) {
+			continue
+		}
+		c.pathToWaterIndex[util.Idx(pos)] = pathIdx
+	}
+}
+
+func (c *Colony) IsPathToWater(pos util.Position) bool {
+	if util.OutOfBounds(pos) || len(c.pathToWaterMask) == 0 {
+		return false
+	}
+	return c.pathToWaterMask[util.Idx(pos)]
+}
+
+func (c *Colony) NextPathStep(pos, target util.Position) (util.Position, bool) {
+	currIdx, ok := c.PathToWaterIndex(pos)
+	if !ok {
+		return util.Position{}, false
+	}
+	targetIdx, ok := c.PathToWaterIndex(target)
+	if !ok || currIdx == targetIdx {
+		return util.Position{}, false
+	}
+	if currIdx < targetIdx {
+		return c.PathToWater[currIdx+1], true
+	}
+	return c.PathToWater[currIdx-1], true
+}
+
+func (c *Colony) PathToWaterIndex(pos util.Position) (int, bool) {
+	if util.OutOfBounds(pos) || len(c.pathToWaterIndex) == 0 {
+		return 0, false
+	}
+	idx := c.pathToWaterIndex[util.Idx(pos)]
+	return idx, idx >= 0
 }
 
 func CalcExpiresAt() time.Time {

@@ -7,7 +7,6 @@ import (
 	"golab/internal/util"
 	"image"
 	"os"
-	"slices"
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -449,13 +448,13 @@ func DrawGrid(brd *core.Board, bots []*core.Bot) {
 
 		p := Position{R: idx / core.Cols, C: idx % core.Cols}
 		col, uv := pickSprite(brd.At(p), idx)
-		if conf.RenderPaths && slices.Contains(brd.PathsToRenderR, p) {
+		if conf.RenderPaths && brd.IsPathToRender(p) {
 			col, uv = util.CyanColor(), uvLight
 		}
-		if conf.RenderTaskTargets && slices.Contains(brd.TaskTargetsR, p) {
+		if conf.RenderTaskTargets && brd.IsTaskTargetToRender(p) {
 			col, uv = util.PinkColor(), uvLight
 		}
-		if conf.RenderUnreachables && slices.Contains(brd.UnreachablesR, p) {
+		if conf.RenderUnreachables && brd.IsUnreachableToRender(p) {
 			col, uv = util.RedColor(), uvLight
 		}
 		base := idx * vPerQuad

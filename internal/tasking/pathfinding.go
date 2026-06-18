@@ -60,7 +60,7 @@ func CalcFlowField(sources []util.Position, brd *core.Board) []int16 {
 		d := dist[util.Idx(p)]
 		for _, mv := range util.PosCross {
 			n := p.AddDir(mv)
-			if util.OutOfBounds(n) || !brd.IsEmpty(n) || brd.GetBot(n) != nil {
+			if !brd.IsEmptyOrBot(n) {
 				continue
 			}
 			ni := util.Idx(n)
@@ -77,7 +77,13 @@ func findPath(start, end Position, passable func(Position) bool) []Position {
 	if start == end {
 		return nil
 	}
-	h := func(a, b Position) int { return util.Abs(a.R-b.R) + util.Abs(a.C-b.C) }
+	h := func(a, b Position) int {
+		dc := util.Abs(a.C - b.C)
+		if wrapped := util.Cols - dc; wrapped < dc {
+			dc = wrapped
+		}
+		return util.Abs(a.R-b.R) + dc
+	}
 
 	open := &hp{{p: start, g: 0, f: h(start, end)}}
 	heap.Init(open)
@@ -87,6 +93,9 @@ func findPath(start, end Position, passable func(Position) bool) []Position {
 
 	for open.Len() > 0 {
 		curr := heap.Pop(open).(node)
+		if gScore[curr.p] != curr.g {
+			continue
+		}
 		if curr.p == end {
 			var path []Position
 			for p := end; p != start; p = prev[p] {

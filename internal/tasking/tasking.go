@@ -29,15 +29,14 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 			return
 		}
 
-		// c.PathToWater = CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
-		c.PathToWater = CalcPath(ctrl.Pos, util.NewPos(1, 1), brd.IsEmptyOrBot, nil)
-		pathLen := len(c.PathToWater)
+		path := CalcPath(ctrl.Pos, task.Pos, brd.IsEmptyOrBot, nil)
+		pathLen := len(path)
 		if pathLen == 0 {
 			return
 		}
 		// remove water tile itself
-		c.PathToWater = c.PathToWater[:pathLen-1]
-		brd.PathsToRenderR = append(brd.PathsToRenderR, c.PathToWater...)
+		c.SetPathToWater(path[:pathLen-1])
+		brd.AddPathsToRender(c.PathToWater...)
 		if len(c.PathToWater) == 0 {
 			continue
 		}
@@ -49,6 +48,9 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		continue
 	}
 
+	farPos := farthestPos(c.PathToWater, ctrl.Pos)
+	freeBots := SortedFreeBots(c.Members, farPos, now)
+	nextFreeBot := 0
 	for _, task := range c.Tasks {
 		if task.Type != core.MaintainConnectionTask || task.IsDone {
 			continue
@@ -71,8 +73,9 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		if task.HasOwner() {
 			continue
 		}
-		farPos := farthestPos(c.WaterPositions, ctrl.Pos)
-		for _, b := range SortedFreeBots(c.Members, farPos, now) {
+		for nextFreeBot < len(freeBots) {
+			b := freeBots[nextFreeBot]
+			nextFreeBot++
 			if b.HasTask() || b.HasCooldown(now) {
 				continue
 			}

@@ -14,6 +14,7 @@ import (
 	"golab/internal/config"
 	"golab/internal/core"
 	"golab/internal/game"
+	"golab/internal/render"
 
 	expRand "golang.org/x/exp/rand"
 )
@@ -47,6 +48,9 @@ func runCommand(args []string) bool {
 		return true
 	case "run", "seed-roulette":
 		runSeedRoulette(args[1:])
+		return true
+	case "render":
+		runRender(args[1:])
 		return true
 	default:
 		return false
@@ -200,6 +204,58 @@ func runReplay(args []string) {
 		"frames":        summary,
 		"final_summary": summary[len(summary)-1],
 		"winner":        winningBot(summary[len(summary)-1].TopBots),
+	}
+	printJSON(payload, *pretty)
+}
+
+func runRender(args []string) {
+	flags := commandFlagSet("render")
+	seed := flags.Int64("seed", 1, "Deterministic PRNG seed.")
+	ticks := flags.Int("ticks", defaultStatusTicks, "Simulation ticks to execute before rendering.")
+	output := flags.String("output", "golab-render.png", "PNG output path.")
+	cellSize := flags.Int("cell-size", 2, "Output pixels per board cell.")
+	padding := flags.Int("padding", 24, "Outer image padding in pixels.")
+	atlasPath := flags.String("atlas", "assests/sprites/atlas.png", "Sprite atlas path.")
+	style := flags.String("style", "flat", "Render style: flat or atlas.")
+	border := flags.Bool("border", true, "Draw a border around the board.")
+	legend := flags.Bool("legend", true, "Draw a compact visual legend below the board.")
+	pretty := flags.Bool("pretty", false, "Pretty-print JSON output.")
+	usage := "render [--seed N] [--ticks N] [--output path] [--cell-size N] [--padding N] [--style flat|atlas] [--border=true|false] [--legend=true|false] [--pretty]"
+	if err := parseCommandFlags(flags, args, usage); err != nil {
+		os.Exit(2)
+	}
+
+	tickCount := normalizeNonNegativeInt(*ticks)
+	gameRunner := newDeterministicGame(*seed)
+	gameRunner.InitializeForCommands()
+	gameRunner.RunHeadlessFrames(tickCount)
+
+	result, err := render.SaveBoardPNG(gameRunner.Board, render.Options{
+		AtlasPath:          *atlasPath,
+		Output:             *output,
+		CellSize:           normalizePositiveInt(*cellSize),
+		Padding:            normalizeNonNegativeInt(*padding),
+		Border:             *border,
+		Legend:             *legend,
+		Style:              *style,
+		RenderPaths:        true,
+		RenderTaskTargets:  true,
+		RenderUnreachables: true,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	payload := map[string]any{
+		"command":   "render",
+		"seed":      *seed,
+		"ticks":     tickCount,
+		"output":    result.Output,
+		"width":     result.Width,
+		"height":    result.Height,
+		"cell_size": normalizePositiveInt(*cellSize),
+		"style":     *style,
 	}
 	printJSON(payload, *pretty)
 }

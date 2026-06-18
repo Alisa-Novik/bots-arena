@@ -53,6 +53,10 @@ type Board struct {
 	PathsToRenderR []util.Position
 	UnreachablesR  []util.Position
 
+	taskTargetsMask   []bool
+	pathsToRenderMask []bool
+	unreachablesMask  []bool
+
 	grid     []Occupant
 	occupied []bool
 	dirty    []bool
@@ -115,11 +119,48 @@ func initNeighbourTable() {
 func NewBoard() *Board {
 	initNeighbourTable()
 	return &Board{
-		grid:     make([]Occupant, Rows*Cols),
-		occupied: make([]bool, Rows*Cols),
-		dirty:    make([]bool, Rows*Cols),
-		Bots:     make([]*Bot, util.Cells),
+		taskTargetsMask:   make([]bool, util.Cells),
+		pathsToRenderMask: make([]bool, util.Cells),
+		unreachablesMask:  make([]bool, util.Cells),
+		grid:              make([]Occupant, Rows*Cols),
+		occupied:          make([]bool, Rows*Cols),
+		dirty:             make([]bool, Rows*Cols),
+		Bots:              make([]*Bot, util.Cells),
 	}
+}
+
+func (b *Board) AddPathsToRender(path ...Position) {
+	for _, p := range path {
+		if !Inside(p) {
+			continue
+		}
+		i := idx(p)
+		if !b.pathsToRenderMask[i] {
+			b.pathsToRenderMask[i] = true
+			b.PathsToRenderR = append(b.PathsToRenderR, p)
+		}
+		b.MarkDirty(i)
+	}
+}
+
+func (b *Board) IsPathToRender(pos Position) bool {
+	return b.isMarked(b.pathsToRenderMask, pos)
+}
+
+func (b *Board) IsTaskTargetToRender(pos Position) bool {
+	return b.isMarked(b.taskTargetsMask, pos)
+}
+
+func (b *Board) IsUnreachableToRender(pos Position) bool {
+	return b.isMarked(b.unreachablesMask, pos)
+}
+
+func (b *Board) isMarked(mask []bool, pos Position) bool {
+	if !Inside(pos) {
+		return false
+	}
+	i := idx(pos)
+	return i < len(mask) && mask[i]
 }
 
 func NewRandomPosition() Position {

@@ -9,7 +9,6 @@ import (
 	"golab/internal/ui"
 	"golab/internal/util"
 	"math/rand"
-	"slices"
 	"time"
 )
 
@@ -710,23 +709,27 @@ func (g *Game) tryMove(oldPos core.Position, b *core.Bot) {
 	oldIdx := util.Idx(oldPos)
 
 	if b.HasTask() {
-		// fmt.Printf("Pos %v, Target %v, Path %v\n", b.Pos, b.CurrTask.Pos, b.Path)
-		if slices.Contains(b.Colony.PathToWater, oldPos) {
+		newPos = oldPos
+		if b.CurrTask.Type == core.MaintainConnectionTask && oldPos == b.CurrTask.Pos {
 			b.CurrTask.MarkDone()
 			return
 		}
-		if b.Colony.WaterPathFlowField == nil {
+		if b.Colony == nil || b.Colony.WaterPathFlowField == nil {
 			fmt.Println("Flow field is empty.")
 			return
 		}
-		best := b.Colony.WaterPathFlowField[oldIdx]
-		for _, dir := range util.PosCross {
-			n := oldPos.AddDir(dir)
-			if g.Board.GetBot(n) != nil {
-				continue
-			}
-			if v := b.Colony.WaterPathFlowField[util.Idx(n)]; v < best {
-				best, newPos = v, n
+		if next, ok := b.Colony.NextPathStep(oldPos, b.CurrTask.Pos); ok {
+			newPos = next
+		} else {
+			best := b.Colony.WaterPathFlowField[oldIdx]
+			for _, dir := range util.PosCross {
+				n := oldPos.AddDir(dir)
+				if g.Board.GetBot(n) != nil {
+					continue
+				}
+				if v := b.Colony.WaterPathFlowField[util.Idx(n)]; v < best {
+					best, newPos = v, n
+				}
 			}
 		}
 	}
