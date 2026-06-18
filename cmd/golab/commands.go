@@ -214,13 +214,13 @@ func runRender(args []string) {
 	ticks := flags.Int("ticks", defaultStatusTicks, "Simulation ticks to execute before rendering.")
 	output := flags.String("output", "golab-render.png", "PNG output path.")
 	cellSize := flags.Int("cell-size", 2, "Output pixels per board cell.")
-	padding := flags.Int("padding", 24, "Outer image padding in pixels.")
+	padding := flags.Int("padding", 0, "Outer image padding in pixels.")
 	atlasPath := flags.String("atlas", "assests/sprites/atlas.png", "Sprite atlas path.")
-	style := flags.String("style", "flat", "Render style: flat or atlas.")
-	border := flags.Bool("border", true, "Draw a border around the board.")
-	legend := flags.Bool("legend", true, "Draw a compact visual legend below the board.")
+	style := flags.String("style", "game", "Render style: game, atlas, or flat.")
+	border := flags.Bool("border", false, "Draw a border around the board.")
+	legend := flags.Bool("legend", false, "Draw a compact visual legend below the board.")
 	pretty := flags.Bool("pretty", false, "Pretty-print JSON output.")
-	usage := "render [--seed N] [--ticks N] [--output path] [--cell-size N] [--padding N] [--style flat|atlas] [--border=true|false] [--legend=true|false] [--pretty]"
+	usage := "render [--seed N] [--ticks N] [--output path] [--cell-size N] [--padding N] [--style game|atlas|flat] [--border=true|false] [--legend=true|false] [--pretty]"
 	if err := parseCommandFlags(flags, args, usage); err != nil {
 		os.Exit(2)
 	}

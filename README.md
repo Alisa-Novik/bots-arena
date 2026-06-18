@@ -37,10 +37,10 @@ git clone https://github.com/yourname/bots-arena.git
 cd bots-arena
 
 go mod download
-go build
+go build -o bin/golab ./cmd/golab
 ````
 
-This will generate a binary called `bots-arena` in the current directory.
+This will generate a binary at `bin/golab`.
 
 ---
 
@@ -49,13 +49,13 @@ This will generate a binary called `bots-arena` in the current directory.
 To launch the simulation:
 
 ```bash
-./bots-arena
+./bin/golab
 ```
 
 Or directly via:
 
 ```bash
-go run .
+go run ./cmd/golab
 ```
 
 ### Deterministic CLI surface (Linux/Discord automation)
@@ -63,10 +63,11 @@ go run .
 The binary also supports JSON-oriented command entry points for deterministic workflows:
 
 ```bash
-go run . status --seed 42 --ticks 20 --top-bots 10
-go run . match --seed 42 --ticks 300
-go run . leaderboard --seed 100 --matches 3 --seed-step 7 --ticks 300
-go run . replay --seed 42 --ticks 120 --sample-every 5
+go run ./cmd/golab status --seed 42 --ticks 20 --top-bots 10
+go run ./cmd/golab match --seed 42 --ticks 300
+go run ./cmd/golab leaderboard --seed 100 --matches 3 --seed-step 7 --ticks 300
+go run ./cmd/golab replay --seed 42 --ticks 120 --sample-every 5
+go run ./cmd/golab render --seed 42 --ticks 120 --output /tmp/bots-arena.png
 ```
 
 All command modes are emitted as JSON and are deterministic for a fixed `--seed`:
@@ -75,6 +76,7 @@ All command modes are emitted as JSON and are deterministic for a fixed `--seed`
 - `match`: one deterministic summary with winner fields.
 - `leaderboard`: deterministic aggregate of multiple matches.
 - `replay`: per-frame snapshots at a fixed sampling interval.
+- `render`: PNG board render using the same atlas-backed tile style as the game by default. Use `--style flat --padding 24 --border --legend` for the compact card-style diagnostic image.
 
 The existing interactive mode remains unchanged when no command name is provided.
 

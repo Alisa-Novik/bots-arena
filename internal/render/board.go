@@ -70,10 +70,10 @@ func SaveBoardPNG(brd *core.Board, opts Options) (Result, error) {
 		opts.Padding = 0
 	}
 	if opts.Style == "" {
-		opts.Style = "flat"
+		opts.Style = "game"
 	}
-	if opts.Style != "flat" && opts.Style != "atlas" {
-		return Result{}, fmt.Errorf("unknown render style %q: use flat or atlas", opts.Style)
+	if opts.Style != "flat" && opts.Style != "atlas" && opts.Style != "game" {
+		return Result{}, fmt.Errorf("unknown render style %q: use flat, atlas, or game", opts.Style)
 	}
 
 	atlas, err := loadAtlas(opts.AtlasPath)
@@ -195,7 +195,7 @@ func visualFor(o core.Occupant) (int, [3]float32) {
 }
 
 func drawCell(dst *image.RGBA, rect image.Rectangle, atlas *image.RGBA, tileSize, tile int, tint [3]float32, style string) {
-	if style != "atlas" && tile != tileBot {
+	if style == "flat" && tile != tileBot {
 		draw.Draw(dst, rect, &image.Uniform{flatColor(tile, tint)}, image.Point{}, draw.Src)
 		return
 	}
