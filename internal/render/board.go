@@ -26,6 +26,8 @@ const (
 	tileFlag
 )
 
+const densityChunkSize = 4
+
 var (
 	pageBackground = color.RGBA{R: 13, G: 17, B: 23, A: 255}
 	boardBorder    = color.RGBA{R: 190, G: 200, B: 210, A: 255}
@@ -72,8 +74,8 @@ func SaveBoardPNG(brd *core.Board, opts Options) (Result, error) {
 	if opts.Style == "" {
 		opts.Style = "game"
 	}
-	if opts.Style != "flat" && opts.Style != "atlas" && opts.Style != "game" {
-		return Result{}, fmt.Errorf("unknown render style %q: use flat, atlas, or game", opts.Style)
+	if opts.Style != "flat" && opts.Style != "atlas" && opts.Style != "game" && opts.Style != "pheromone" && opts.Style != "biome" && opts.Style != "density" && opts.Style != "colony" {
+		return Result{}, fmt.Errorf("unknown render style %q: use flat, atlas, game, pheromone, biome, density, or colony", opts.Style)
 	}
 
 	atlas, err := loadAtlas(opts.AtlasPath)
@@ -103,7 +105,7 @@ func SaveBoardPNG(brd *core.Board, opts Options) (Result, error) {
 		drawBorder(img, boardRect)
 	}
 	if opts.Legend {
-		drawLegend(img, opts.Padding, boardRect.Max.Y+opts.Padding, opts.CellSize, atlas, tileSize)
+		drawLegend(img, opts.Padding, boardRect.Max.Y+opts.Padding, opts.CellSize, atlas, tileSize, opts.Style)
 	}
 
 	file, err := os.Create(opts.Output)
@@ -140,21 +142,50 @@ func drawBoard(dst *image.RGBA, rect image.Rectangle, brd *core.Board, atlas *im
 	for row := 0; row < core.Rows; row++ {
 		for col := 0; col < core.Cols; col++ {
 			pos := util.Position{R: row, C: col}
-			tile, tint := visualFor(brd.At(pos))
-			if opts.RenderPaths && brd.IsPathToRender(pos) {
+			occupant := brd.At(pos)
+			if opts.Style == "density" {
+				if _, ok := occupant.(*core.Bot); ok {
+					occupant = nil
+				}
+			}
+			tile, tint := visualFor(occupant)
+			if opts.Style == "pheromone" {
+				tile, tint = pheromoneVisual(brd.PheromoneAt(pos))
+			}
+			if opts.Style == "biome" {
+				tile, tint = biomeVisual(brd.At(pos), brd.BiomeAt(pos), tile, tint)
+			}
+			if opts.Style == "colony" {
+				tile, tint = colonyVisual(brd, pos, occupant, tile, tint)
+			}
+			if opts.Style != "pheromone" && opts.RenderPaths && brd.IsPathToRender(pos) {
 				tile, tint = tileLight, util.CyanColor()
 			}
-			if opts.RenderTaskTargets && brd.IsTaskTargetToRender(pos) {
+			if opts.Style != "pheromone" && opts.RenderTaskTargets && brd.IsTaskTargetToRender(pos) {
 				tile, tint = tileLight, util.PinkColor()
 			}
-			if opts.RenderUnreachables && brd.IsUnreachableToRender(pos) {
+			if opts.Style != "pheromone" && opts.RenderUnreachables && brd.IsUnreachableToRender(pos) {
 				tile, tint = tileLight, util.RedColor()
+			}
+			if brd.IsFrozen(pos) {
+				tile, tint = tileLight, frozenTint(tint)
 			}
 
 			x0 := rect.Min.X + col*opts.CellSize
 			y0 := rect.Min.Y + (core.Rows-1-row)*opts.CellSize
 			drawCell(dst, image.Rect(x0, y0, x0+opts.CellSize, y0+opts.CellSize), atlas, tileSize, tile, tint, opts.Style)
 		}
+	}
+	if opts.Style == "density" {
+		drawDensityOverlay(dst, rect, brd, opts.CellSize)
+	}
+}
+
+func frozenTint(tint [3]float32) [3]float32 {
+	return [3]float32{
+		(tint[0] + 0.35) / 2,
+		(tint[1] + 0.9) / 2,
+		(tint[2] + 1.0) / 2,
 	}
 }
 
@@ -164,7 +195,7 @@ func visualFor(o core.Occupant) (int, [3]float32) {
 		if o.IsSelected {
 			return tileBot, util.YellowColor()
 		}
-		return tileBot, o.Color
+		return tileBot, colonyBotColor(o, o.Color)
 	case core.Food:
 		return tileFood, [3]float32{1, 0, 0.8}
 	case core.Water:
@@ -177,6 +208,12 @@ func visualFor(o core.Occupant) (int, [3]float32) {
 		return tileWall, clrWhite
 	case core.Controller:
 		return tileChest, clrWhite
+	case *core.Controller:
+		return tileChest, clrWhite
+	case core.Depot:
+		return tileChest, [3]float32{0.20, 0.95, 0.85}
+	case *core.Depot:
+		return tileChest, [3]float32{0.20, 0.95, 0.85}
 	case core.Mine:
 		return tileSpawner, clrWhite
 	case core.Resource:
@@ -194,12 +231,228 @@ func visualFor(o core.Occupant) (int, [3]float32) {
 	}
 }
 
+func colonyVisual(brd *core.Board, pos core.Position, o core.Occupant, tile int, tint [3]float32) (int, [3]float32) {
+	switch v := o.(type) {
+	case *core.Bot:
+		return tileBot, colonyModeBotColor(v)
+	case core.Water:
+		return tileLight, [3]float32{0.02, 0.04, 0.10}
+	case core.Controller:
+		return tileChest, colonyStructureColor(v.Colony, tint)
+	case *core.Controller:
+		if v != nil {
+			return tileChest, colonyStructureColor(v.Colony, tint)
+		}
+	case core.Depot:
+		return tileChest, colonyStructureColor(v.Colony, tint)
+	case *core.Depot:
+		if v != nil {
+			return tileChest, colonyStructureColor(v.Colony, tint)
+		}
+	case core.Farm:
+		return tileFarm, colonyStructureColor(colonyForOwnedCell(v.Colony, v.Owner), tint)
+	case core.Spawner:
+		return tileSpawner, colonyStructureColor(colonyForOwner(v.Owner), tint)
+	case core.ColonyFlag:
+		return tileFlag, colonyStructureColor(brd.PheromoneHomeOwnerAt(pos), tint)
+	case nil:
+		if owner := brd.PheromoneHomeOwnerAt(pos); owner != nil && brd.PheromoneAt(pos).Home > 0 {
+			return tileLight, colonyTissueColor(owner.Color, brd.PheromoneAt(pos).Home)
+		}
+		return tileDark, clrGrey
+	}
+	return tile, lerpColor(clrGrey, tint, 0.18)
+}
+
+func colonyBotColor(bot *core.Bot, base [3]float32) [3]float32 {
+	if bot == nil || bot.Colony == nil {
+		return base
+	}
+	if bot.ConnnectedToColony {
+		return lerpColor(base, bot.Colony.Color, 0.82)
+	}
+	return lerpColor(clrGrey, bot.Colony.Color, 0.28)
+}
+
+func colonyModeBotColor(bot *core.Bot) [3]float32 {
+	if bot == nil || bot.Colony == nil {
+		return [3]float32{0.22, 0.24, 0.24}
+	}
+	if bot.ConnnectedToColony {
+		return lerpColor(bot.Colony.Color, clrWhite, 0.16)
+	}
+	return lerpColor(clrGrey, bot.Colony.Color, 0.34)
+}
+
+func colonyStructureColor(colony *core.Colony, fallback [3]float32) [3]float32 {
+	if colony == nil {
+		return fallback
+	}
+	return lerpColor(fallback, colony.Color, 0.92)
+}
+
+func colonyTissueColor(colonyColor [3]float32, home uint8) [3]float32 {
+	intensity := 0.36 + 0.46*clamp01(float32(home)/255)
+	return lerpColor(clrGrey, colonyColor, intensity)
+}
+
+func colonyForOwnedCell(colony *core.Colony, owner *core.Bot) *core.Colony {
+	if colony != nil {
+		return colony
+	}
+	return colonyForOwner(owner)
+}
+
+func colonyForOwner(owner *core.Bot) *core.Colony {
+	if owner == nil {
+		return nil
+	}
+	return owner.Colony
+}
+
 func drawCell(dst *image.RGBA, rect image.Rectangle, atlas *image.RGBA, tileSize, tile int, tint [3]float32, style string) {
+	if style == "pheromone" || style == "density" {
+		draw.Draw(dst, rect, &image.Uniform{flatColor(tile, tint)}, image.Point{}, draw.Src)
+		return
+	}
 	if style == "flat" && tile != tileBot {
 		draw.Draw(dst, rect, &image.Uniform{flatColor(tile, tint)}, image.Point{}, draw.Src)
 		return
 	}
 	drawTile(dst, rect, atlas, tileSize, tile, tint)
+}
+
+func drawDensityOverlay(dst *image.RGBA, rect image.Rectangle, brd *core.Board, cellSize int) {
+	chunkRows := (core.Rows + densityChunkSize - 1) / densityChunkSize
+	chunkCols := (core.Cols + densityChunkSize - 1) / densityChunkSize
+	counts := make([]int, chunkRows*chunkCols)
+	sums := make([][3]float32, chunkRows*chunkCols)
+	touched := make([]int, 0, len(counts))
+
+	for _, id := range brd.ActiveBotIDs() {
+		bot := brd.BotByID(id)
+		if bot == nil {
+			continue
+		}
+		cell := brd.BotCell(id)
+		if cell < 0 {
+			continue
+		}
+		row := cell / core.Cols
+		col := cell % core.Cols
+		chunkIdx := (row/densityChunkSize)*chunkCols + col/densityChunkSize
+		if counts[chunkIdx] == 0 {
+			touched = append(touched, chunkIdx)
+		}
+		counts[chunkIdx]++
+		color := bot.Color
+		sums[chunkIdx][0] += color[0]
+		sums[chunkIdx][1] += color[1]
+		sums[chunkIdx][2] += color[2]
+	}
+
+	chunkArea := densityChunkSize * densityChunkSize
+	for _, chunkIdx := range touched {
+		count := counts[chunkIdx]
+		chunkRow := chunkIdx / chunkCols
+		chunkCol := chunkIdx % chunkCols
+		row := chunkRow * densityChunkSize
+		col := chunkCol * densityChunkSize
+		chunkH := min(densityChunkSize, core.Rows-row)
+		chunkW := min(densityChunkSize, core.Cols-col)
+		x0 := rect.Min.X + col*cellSize
+		y0 := rect.Min.Y + (core.Rows-row-chunkH)*cellSize
+		chunkRect := image.Rect(x0, y0, x0+chunkW*cellSize, y0+chunkH*cellSize)
+		draw.Draw(dst, chunkRect, &image.Uniform{flatColor(tileLight, densityColor(count, sums[chunkIdx], chunkArea))}, image.Point{}, draw.Over)
+	}
+}
+
+func densityColor(count int, sum [3]float32, chunkArea int) [3]float32 {
+	if count <= 0 {
+		return clrGrey
+	}
+	invCount := 1 / float32(count)
+	avg := [3]float32{sum[0] * invCount, sum[1] * invCount, sum[2] * invCount}
+	occupancy := clamp01(float32(count) / float32(max(1, chunkArea)))
+	return lerpColor(lerpColor(clrGrey, avg, 0.68), clrWhite, occupancy*0.22)
+}
+
+func pheromoneVisual(values core.PheromoneValues) (int, [3]float32) {
+	if values.IsZero() {
+		return tileDark, clrGrey
+	}
+	return tileLight, pheromoneColor(values)
+}
+
+func pheromoneColor(values core.PheromoneValues) [3]float32 {
+	weights := []struct {
+		value uint8
+		color [3]float32
+	}{
+		{values.Food, [3]float32{1.00, 0.00, 0.82}},
+		{values.Ore, [3]float32{1.00, 0.86, 0.05}},
+		{values.Home, [3]float32{0.00, 0.90, 1.00}},
+		{values.Danger, [3]float32{1.00, 0.05, 0.02}},
+	}
+	var sum, maxValue float32
+	var out [3]float32
+	for _, weight := range weights {
+		value := float32(weight.value)
+		if value == 0 {
+			continue
+		}
+		sum += value
+		if value > maxValue {
+			maxValue = value
+		}
+		out[0] += weight.color[0] * value
+		out[1] += weight.color[1] * value
+		out[2] += weight.color[2] * value
+	}
+	if sum == 0 {
+		return clrGrey
+	}
+	intensity := 0.25 + 0.75*clamp01(maxValue/255)
+	return [3]float32{
+		clamp01(out[0] / sum * intensity),
+		clamp01(out[1] / sum * intensity),
+		clamp01(out[2] / sum * intensity),
+	}
+}
+
+func biomeVisual(o core.Occupant, biome core.Biome, tile int, tint [3]float32) (int, [3]float32) {
+	biomeTint := biomeColor(biome)
+	switch o.(type) {
+	case nil:
+		return tileLight, biomeTint
+	case core.Food, core.Organics:
+		return tile, lerpColor(tint, biomeTint, 0.28)
+	case core.Water:
+		return tile, lerpColor(tint, biomeTint, 0.16)
+	default:
+		return tile, tint
+	}
+}
+
+func biomeColor(biome core.Biome) [3]float32 {
+	switch biome {
+	case core.BiomeFertile:
+		return [3]float32{0.20, 0.54, 0.31}
+	case core.BiomeMineral:
+		return [3]float32{0.58, 0.48, 0.24}
+	case core.BiomeToxic:
+		return [3]float32{0.52, 0.22, 0.58}
+	default:
+		return [3]float32{0.23, 0.25, 0.27}
+	}
+}
+
+func lerpColor(a, b [3]float32, t float32) [3]float32 {
+	return [3]float32{
+		a[0] + (b[0]-a[0])*t,
+		a[1] + (b[1]-a[1])*t,
+		a[2] + (b[2]-a[2])*t,
+	}
 }
 
 func drawTile(dst *image.RGBA, rect image.Rectangle, atlas *image.RGBA, tileSize, tile int, tint [3]float32) {
@@ -261,6 +514,16 @@ func toByte(v float32) uint8 {
 	return uint8(v * 255)
 }
 
+func clamp01(v float32) float32 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
 func over(bg, fg color.RGBA) color.RGBA {
 	if fg.A == 255 {
 		return fg
@@ -289,9 +552,43 @@ func drawBorder(dst *image.RGBA, rect image.Rectangle) {
 	}
 }
 
-func drawLegend(dst *image.RGBA, x, y, cellSize int, atlas *image.RGBA, tileSize int) {
+func drawLegend(dst *image.RGBA, x, y, cellSize int, atlas *image.RGBA, tileSize int, style string) {
 	size := max(14, cellSize*7)
 	gap := size + 18
+	if style == "pheromone" {
+		items := []core.PheromoneValues{
+			{Food: 255},
+			{Ore: 255},
+			{Home: 255},
+			{Danger: 255},
+		}
+		for i, item := range items {
+			tile, tint := pheromoneVisual(item)
+			x0 := x + i*gap
+			drawCell(dst, image.Rect(x0, y, x0+size, y+size), atlas, tileSize, tile, tint, "pheromone")
+		}
+		return
+	}
+	if style == "biome" {
+		items := []struct {
+			tile int
+			tint [3]float32
+		}{
+			{tileLight, biomeColor(core.BiomeNeutral)},
+			{tileLight, biomeColor(core.BiomeFertile)},
+			{tileLight, biomeColor(core.BiomeMineral)},
+			{tileLight, biomeColor(core.BiomeToxic)},
+			{tileLight, [3]float32{0, 0, 0.8}},
+			{tileOre, clrWhite},
+			{tileFood, [3]float32{1, 0, 0.8}},
+			{tileBot, util.LightBlueColor()},
+		}
+		for i, item := range items {
+			x0 := x + i*gap
+			drawCell(dst, image.Rect(x0, y, x0+size, y+size), atlas, tileSize, item.tile, item.tint, "flat")
+		}
+		return
+	}
 	items := []struct {
 		tile int
 		tint [3]float32

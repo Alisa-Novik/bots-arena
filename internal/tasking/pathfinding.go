@@ -6,6 +6,7 @@ import (
 	"golab/internal/core"
 	"golab/internal/util"
 	"math"
+	"slices"
 )
 
 type Position = util.Position
@@ -48,29 +49,49 @@ func CalcFlowField(sources []util.Position, brd *core.Board) []int16 {
 	for i := range dist {
 		dist[i] = math.MaxInt16
 	}
-	q := make([]util.Position, 0, len(sources))
+	q := make([]int32, 0, util.Cells)
 	for _, p := range sources {
-		dist[util.Idx(p)] = 0
-		q = append(q, p)
+		if util.OutOfBounds(p) {
+			continue
+		}
+		sourceIdx := util.Idx(p)
+		dist[sourceIdx] = 0
+		q = append(q, int32(sourceIdx))
 	}
 	head := 0
 	for head < len(q) {
-		p := q[head]
+		i := int(q[head])
 		head++
-		d := dist[util.Idx(p)]
-		for _, mv := range util.PosCross {
-			n := p.AddDir(mv)
-			if !brd.IsEmptyOrBot(n) {
+		d := dist[i]
+		for _, ni := range crossNeighborIndices(i) {
+			if !brd.IsEmptyOrBotIdx(ni) {
 				continue
 			}
-			ni := util.Idx(n)
 			if dist[ni] > d+1 {
 				dist[ni] = d + 1
-				q = append(q, n)
+				q = append(q, int32(ni))
 			}
 		}
 	}
 	return dist
+}
+
+func crossNeighborIndices(i int) [4]int {
+	c := i % util.Cols
+	left := i - 1
+	if c == 0 {
+		left = i + util.Cols - 1
+	}
+	right := i + 1
+	if c == util.Cols-1 {
+		right = i - util.Cols + 1
+	}
+	return [4]int{
+		i + util.Cols,
+		right,
+		i - util.Cols,
+		left,
+	}
 }
 
 func findPath(start, end Position, passable func(Position) bool) []Position {
@@ -97,10 +118,11 @@ func findPath(start, end Position, passable func(Position) bool) []Position {
 			continue
 		}
 		if curr.p == end {
-			var path []Position
+			path := make([]Position, 0, curr.g)
 			for p := end; p != start; p = prev[p] {
-				path = append([]Position{p}, path...)
+				path = append(path, p)
 			}
+			slices.Reverse(path)
 			return path
 		}
 		closed[curr.p] = struct{}{}

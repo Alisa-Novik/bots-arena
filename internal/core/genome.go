@@ -18,6 +18,7 @@ const (
 	BuildBuilding
 	BuildMine
 	BuildColonyFlag
+	BuildDepot
 	numBuildTypes
 )
 
@@ -39,6 +40,10 @@ func (b BuildType) String() string {
 		return "BuildMine"
 	case BuildBuilding:
 		return "BuildBuilding"
+	case BuildColonyFlag:
+		return "BuildColonyFlag"
+	case BuildDepot:
+		return "BuildDepot"
 	}
 	return "unknown"
 }
@@ -76,6 +81,10 @@ const (
 	OpDecReg
 	OpJumpIfZero
 	OpCmpReg
+	OpEmitPheromone
+	OpSensePheromone
+	OpFollowPheromone
+	numOpcodes
 )
 
 func (o Opcode) String() string {
@@ -90,13 +99,31 @@ func (o Opcode) String() string {
 		return "OpGrab"
 	case OpBuild:
 		return "OpBuild"
+	case OpEmitPheromone:
+		return "OpEmitPheromone"
+	case OpSensePheromone:
+		return "OpSensePheromone"
+	case OpFollowPheromone:
+		return "OpFollowPheromone"
 	}
 	return "OpJump/Unknown"
 }
 
+func DecodeOpcode(value int) Opcode {
+	if value < 0 {
+		value = -value
+	}
+	return Opcode(value % int(numOpcodes))
+}
+
+func OpcodeCount() int {
+	return int(numOpcodes)
+}
+
 const genomeLen = 64
 const genomeMaxValue = genomeLen - 1
-const mutationRate = 4
+const defaultGenomeMutationRate = 4
+const broGenomeDifferenceLimit = 4
 const botHp = 100
 
 type Genome struct {
@@ -126,16 +153,27 @@ func (b *Bot) CmdArg(i int) int {
 }
 
 func (b *Bot) CmdArgDir(i int, pos util.Position) util.Position {
-	dir := util.PosClock[b.CmdArg(1)%8]
+	dir := util.PosClock[b.CmdArg(i)%8]
 	return pos.AddDir(dir)
 }
 
 func (b *Bot) IsOffspring(parent *Bot) bool {
+	return b.isOffspring(parent, map[*Bot]struct{}{})
+}
+
+func (b *Bot) isOffspring(parent *Bot, visited map[*Bot]struct{}) bool {
+	if b == nil || parent == nil {
+		return false
+	}
 	if b == parent {
 		return true
 	}
+	if _, ok := visited[parent]; ok {
+		return false
+	}
+	visited[parent] = struct{}{}
 	for o := range parent.Offsprings {
-		if o.IsOffspring(parent) {
+		if b.isOffspring(o, visited) {
 			return true
 		}
 	}
@@ -143,24 +181,36 @@ func (b *Bot) IsOffspring(parent *Bot) bool {
 }
 
 func (b *Bot) FromString(other *Bot) bool {
-	return b.Colony == other.Colony
+	return b.SameColony(other)
 }
 
 func (b *Bot) SameColony(other *Bot) bool {
-	return b.Colony == other.Colony
+	return b != nil && other != nil && b.Colony != nil && b.Colony == other.Colony
 }
 
 func (b *Bot) IsBro(other *Bot) bool {
+	if b == nil || other == nil {
+		return false
+	}
 	differences := 0
 	for i := range b.Genome.Matrix {
 		if b.Genome.Matrix[i] != other.Genome.Matrix[i] {
 			differences++
-			if differences > mutationRate {
+			if differences > broGenomeDifferenceLimit {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+func (b *Bot) IsKin(other *Bot) bool {
+	return b != nil && other != nil &&
+		(b == other || b.IsBro(other) || b.IsOffspring(other) || other.IsOffspring(b))
+}
+
+func BotsFriendly(a, b *Bot) bool {
+	return a != nil && b != nil && (a == b || a.SameColony(b) || a.IsKin(b))
 }
 
 func (b *Bot) ptrPlus(add int) int {
@@ -175,13 +225,16 @@ func NewMutatedGenome(genome Genome, doMutation bool) Genome {
 	if !doMutation {
 		return genome
 	}
+	return NewMutatedGenomeWithRate(genome, defaultGenomeMutationRate)
+}
+
+func NewMutatedGenomeWithRate(genome Genome, mutationRate int) Genome {
+	if mutationRate <= 0 {
+		return genome
+	}
 	for range mutationRate {
 		mutationIdx := rand.Intn(genomeLen)
-		for i := range genome.Matrix {
-			if i == mutationIdx {
-				genome.Matrix[i] = rand.Intn(genomeMaxValue)
-			}
-		}
+		genome.Matrix[mutationIdx] = NewRandomGenomeValue()
 	}
 	return genome
 }
@@ -189,33 +242,14 @@ func NewMutatedGenome(genome Genome, doMutation bool) Genome {
 func NewRandomGenome() Genome {
 	var g Genome
 	for i := range g.Matrix {
-		g.Matrix[i] = rand.Intn(genomeMaxValue)
+		g.Matrix[i] = NewRandomGenomeValue()
 	}
-	g.Matrix[0] = int(OpMove)
-	g.Matrix[1] = int(OpGrab)
-	// g.Matrix[2] = int(OpBuild)
-	// g.Matrix[2] = int(OpGrab)
-	// g.Matrix[3] = int(OpGrab)
-	// g.Matrix[4] = int(OpBuild)
-	// g.Matrix[5] = int(OpBuild)
-	// g.Matrix[6] = int(OpBuild)
-	// g.Matrix[7] = int(OpBuild)
-	// g.Matrix[2] = int(OpLook)
-	// g.Matrix[3] = int(OpTurn)
-	// g.Matrix[4] = int(OpCmpReg)
-	// g.Matrix[5] = int(OpLook)
-	// g.Matrix[6] = int(OpMove)
-	// g.Matrix[7] = int(OpBuild)
-	// g.Matrix[8] = int(BuildFarm)
-	// g.Matrix[9] = int(OpEatOther)
-	// g.Matrix[10] = int(OpCmpReg)
-	// g.Matrix[11] = int(OpPhoto)
-	// g.Matrix[12] = int(OpBuild)
-	// g.Matrix[13] = int(OpCmpReg)
-	// g.Matrix[14] = int(OpCmpReg)
-	// g.Matrix[15] = int(OpBuild)
 	g.Pointer = 0
 	return g
+}
+
+func NewRandomGenomeValue() int {
+	return rand.Intn(genomeMaxValue + 1)
 }
 
 func readGenome(data string) *Genome {

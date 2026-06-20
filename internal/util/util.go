@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	ScaleFactor = 7
+	ScaleFactor = 10
 	Rows        = 40 * ScaleFactor
 	Cols        = 60 * ScaleFactor
 	Cells       = Rows * Cols
@@ -114,7 +114,7 @@ func RollChance(percent int) bool {
 	return rand.Intn(100) < percent
 }
 
-var PosCross = [8][2]int{
+var PosCross = [4][2]int{
 	{0, 1}, {1, 0}, {0, -1}, {-1, 0},
 }
 

@@ -5,6 +5,7 @@ import (
 	"golab/internal/assert"
 	"golab/internal/core"
 	"golab/internal/util"
+	"os"
 	"sort"
 	"time"
 )
@@ -14,9 +15,6 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 	now := time.Now()
 
 	c.Counter++
-	if c.Counter%5 == 0 {
-		c.WaterPathFlowField = CalcFlowField(c.PathToWater, brd)
-	}
 
 	for _, task := range c.Tasks {
 		if task.Type != core.ConnectToPosTask || task.IsDone {
@@ -24,7 +22,7 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 		}
 		task.Attempts++
 		if task.Attempts > 1 {
-			fmt.Printf("Unable to find pas to %v\n", task.Pos)
+			fmt.Fprintf(os.Stderr, "Unable to find path to %v\n", task.Pos)
 			task.MarkDone()
 			return
 		}
@@ -49,7 +47,7 @@ func ProcessColonyTasks(ctrl *core.Controller, brd *core.Board) {
 	}
 
 	farPos := farthestPos(c.PathToWater, ctrl.Pos)
-	freeBots := SortedFreeBots(c.Members, farPos, now)
+	freeBots := SortedFreeBots(c.Members, c, farPos, now)
 	nextFreeBot := 0
 	for _, task := range c.Tasks {
 		if task.Type != core.MaintainConnectionTask || task.IsDone {
@@ -108,7 +106,7 @@ func SortedByDist(tasks []*core.ColonyTask, target util.Position) []*core.Colony
 	return out
 }
 
-func SortedFreeBots(members []*core.Bot, target util.Position, now time.Time) []*core.Bot {
+func SortedFreeBots(members []*core.Bot, colony *core.Colony, target util.Position, now time.Time) []*core.Bot {
 	type pair struct {
 		b    *core.Bot
 		dist int
@@ -116,7 +114,7 @@ func SortedFreeBots(members []*core.Bot, target util.Position, now time.Time) []
 
 	pairs := make([]pair, 0, len(members))
 	for _, b := range members {
-		if b == nil || b.HasTask() || b.HasCooldown(now) {
+		if b == nil || b.Colony != colony || b.HasTask() || b.HasCooldown(now) {
 			continue
 		}
 		dr := b.Pos.R - target.R

@@ -15,3 +15,6 @@ build/
 
 # Local graphics diagnostics
 debug_graphics.log
+
+# Local interactive saves
+data/saves/

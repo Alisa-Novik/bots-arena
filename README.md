@@ -67,6 +67,9 @@ go run ./cmd/golab status --seed 42 --ticks 20 --top-bots 10
 go run ./cmd/golab match --seed 42 --ticks 300
 go run ./cmd/golab leaderboard --seed 100 --matches 3 --seed-step 7 --ticks 300
 go run ./cmd/golab replay --seed 42 --ticks 120 --sample-every 5
+go run ./cmd/golab gamemaster --seed 7 --ticks 120 --interval 20
+go run ./cmd/golab gamemaster --seed 7 --ticks 120 --interval 20 \
+  --advisor external --gm-command /home/alice/projects/coolio-arena-master/bin/coolio-arena-master
 go run ./cmd/golab render --seed 42 --ticks 120 --output /tmp/bots-arena.png
 ```
 
@@ -76,9 +79,21 @@ All command modes are emitted as JSON and are deterministic for a fixed `--seed`
 - `match`: one deterministic summary with winner fields.
 - `leaderboard`: deterministic aggregate of multiple matches.
 - `replay`: per-frame snapshots at a fixed sampling interval.
-- `render`: PNG board render using the same atlas-backed tile style as the game by default. Use `--style flat --padding 24 --border --legend` for the compact card-style diagnostic image.
+- `gamemaster`: mock game-master observations plus interventions such as resource rain, poison bloom, cooling rain, famine wind, and emergency bot sparks.
+- `render`: PNG board render using the same atlas-backed tile style as the game by default. Use `--style biome --padding 24 --border --legend` for ecological terrain diagnostics, `--style pheromone` for scent fields, `--style colony` for colony tissue, or `--style flat` for compact card-style images.
 
 The existing interactive mode remains unchanged when no command name is provided.
+Interactive mode can also use an external local game-master process:
+
+```bash
+./bin/golab --gm external \
+  --gm-command /home/alice/projects/coolio-arena-master/bin/coolio-arena-master \
+  --gm-interval 120 --gm-timeout 750ms
+```
+
+The external process receives one compact observation JSON on stdin and returns one
+event JSON on stdout. If the command fails or times out, `golab` falls back to the
+mock game master for that observation.
 
 ---
 
@@ -89,7 +104,16 @@ The existing interactive mode remains unchanged when no command name is provided
 | Pan view                  | Drag with left mouse button |
 | Zoom in/out               | Mouse wheel scroll          |
 | Pause simulation          | Press `P` (config toggle)   |
+| Reset simulation          | Press `R`                   |
+| Cycle render mode         | Press `V`                   |
+| Save genome               | Press `G`                   |
+| Save map                  | Press `M`                   |
+| Select god tool           | Press `1`-`0`               |
+| Use selected god tool     | Left click or drag on board |
 | Observe task path overlay | Hover over task-linked bots |
+
+Interactive saves are written as JSON under `data/saves/genomes/` and `data/saves/maps/`.
+Render modes cycle through Normal, Genome, Health, Inventory, Colony, Task, Biome, and Pheromone.
 
 ---
 
